@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Home</h1>
+<p>Welcome, {{ current_user.username }}!</p>
+
+<div class="section">
+    <h2>Create a Public Post</h2>
+    <form method="POST" action="{{ url_for('create_public_post') }}" class="form">
+        <label>Title</label>
+        <input type="text" name="title" placeholder="Enter post title">
+
+        <label>Content</label>
+        <textarea name="content" rows="5" placeholder="Share your fishing experience, question, or report..."></textarea>
+
+        <button type="submit">Post Publicly</button>
+    </form>
+</div>
+
+<div class="section">
+    <h2>My Groups</h2>
+    {% if my_groups %}
+        <div class="card-grid">
+            {% for group in my_groups %}
+                <div class="card">
+                    <h3>{{ group.name }}</h3>
+                    <p>{{ group.description }}</p>
+                    <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">Enter Group</a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>You haven't joined any groups yet.</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>Public Feed</h2>
+    {% if posts %}
+        {% for post in posts %}
+            <div class="post-card">
+                <h3>{{ post.title }}</h3>
+                <p>{{ post.content }}</p>
+                <small>By {{ post.author }} | {{ post.timestamp }}</small>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No public posts yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
