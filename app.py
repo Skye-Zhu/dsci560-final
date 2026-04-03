@@ -1,10 +1,15 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from datetime import datetime
 from data import users, groups, memberships, public_posts, group_messages
+import os
+from werkzeug.utils import secure_filename
+
 
 app = Flask(__name__)
 app.secret_key = "m1-secret-key"
 
+UPLOAD_FOLDER = "static/uploads"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 def get_current_user():
     username = session.get("username")
@@ -110,23 +115,45 @@ def create_public_post():
         return redirect(url_for("login"))
 
     current_user = get_current_user()
+
     title = request.form.get("title", "").strip()
     content = request.form.get("content", "").strip()
+    file = request.files.get("image")
 
     if not title or not content:
         flash("Title and content cannot be empty.", "error")
         return redirect(url_for("home"))
 
+    image_filename = None
+
+    if file and file.filename != "":
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+
+        # 防止文件名重复
+        counter = 1
+        original_name, ext = os.path.splitext(filename)
+
+        while os.path.exists(filepath):
+            filename = f"{original_name}_{counter}{ext}"
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            counter += 1
+
+        file.save(filepath)
+        image_filename = filename
+
     new_post = {
         "id": len(public_posts) + 1,
         "title": title,
         "content": content,
+        "image": image_filename,   
         "author": current_user["username"],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
+
     public_posts.append(new_post)
 
-    flash("Public post created successfully!", "success")
+    flash("Post created successfully!", "success")
     return redirect(url_for("home"))
 
 
