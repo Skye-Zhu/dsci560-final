@@ -55,6 +55,11 @@
                 {% endif %}
 
                 <small>By {{ post.author }} | {{ post.timestamp }}</small>
+                {% if post.author == current_user.username %}
+                    <form method="POST" action="{{ url_for('delete_public_post', post_id=post.id) }}" class="delete-form">
+                        <button type="submit" class="delete-button">Delete</button>
+                    </form>
+                {% endif %}
             </div>
         {% endfor %}
     {% else %}

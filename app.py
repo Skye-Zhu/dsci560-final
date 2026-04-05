@@ -158,6 +158,27 @@ def create_public_post():
     flash("Post created successfully!", "success")
     return redirect(url_for("home"))
 
+@app.route("/delete_public_post/<int:post_id>", methods=["POST"])
+def delete_public_post(post_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+
+    post = next((p for p in public_posts if p["id"] == post_id), None)
+
+    if not post:
+        flash("Post not found.", "error")
+        return redirect(url_for("home"))
+
+    if post["author"] != current_user["username"]:
+        flash("You can only delete your own posts.", "error")
+        return redirect(url_for("home"))
+
+    public_posts.remove(post)
+    flash("Post deleted successfully.", "success")
+    return redirect(url_for("home"))
+
 
 @app.route("/groups")
 def group_list():
