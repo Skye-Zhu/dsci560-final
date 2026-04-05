@@ -118,6 +118,7 @@ def create_public_post():
 
     title = request.form.get("title", "").strip()
     content = request.form.get("content", "").strip()
+    location = request.form.get("location", "").strip()
     file = request.files.get("image")
 
     if not title or not content:
@@ -146,7 +147,8 @@ def create_public_post():
         "id": len(public_posts) + 1,
         "title": title,
         "content": content,
-        "image": image_filename,   
+        "image": image_filename, 
+        "location": location if location else None,   
         "author": current_user["username"],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }

@@ -12,6 +12,8 @@
 
         <label>Content</label>
         <textarea name="content" rows="5" placeholder="Share your fishing experience, question, or report..."></textarea>
+        <label>Location (optional)</label>
+        <input type="text" name="location" placeholder="e.g., San Diego, Long Beach">
         <label>Upload Image (optional)</label>
         <input type="file" name="image">
 
@@ -47,6 +49,9 @@
 
                 {% if post.image %}
                     <img src="{{ url_for('static', filename='uploads/' + post.image) }}" class="post-image">
+                {% endif %}
+                {% if post.location %}
+                    <p class="location-text">📍 {{ post.location }}</p>
                 {% endif %}
 
                 <small>By {{ post.author }} | {{ post.timestamp }}</small>
