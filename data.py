@@ -46,7 +46,7 @@ public_posts = [
         "image": None,
         "location": None,
         "author": "alex",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "timestamp": "2026-04-04 10:05",
     },
     {
         "id": 2,
@@ -55,7 +55,7 @@ public_posts = [
         "image": None,
         "location": None,
         "author": "skye",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "timestamp": "2026-04-04 08:20",
     },
 ]
 
@@ -65,13 +65,13 @@ group_messages = [
         "group_id": 2,
         "content": "Anyone been fishing Redondo recently? How was the bite?",
         "author": "skye",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "timestamp": "2026-04-03 08:20",
     },
     {
         "id": 2,
         "group_id": 1,
         "content": "Thinking about booking a charter next weekend. Any recent yellowtail reports?",
         "author": "alex",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "timestamp": "2026-04-04 22:02",
     },
 ]
