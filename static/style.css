@@ -287,3 +287,43 @@ button:hover, .button-link:hover {
     font-size: 13px;
     color: #555;
 }
+
+.post-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.like-form {
+    margin: 0;
+}
+
+.like-button {
+    background: transparent;
+    border: 1px solid #999;
+    color: #333;
+    padding: 6px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    margin-top: 0;
+}
+
+.like-button:hover {
+    border-color: #e91e63;
+    color: #e91e63;
+    background: #fff0f5;
+}
+
+.like-button.liked {
+    border-color: #e91e63;
+    color: #e91e63;
+    background: #fff0f5;
+}
+
+.like-count {
+    font-size: 13px;
+    color: #555;
+}

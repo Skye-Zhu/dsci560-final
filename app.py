@@ -270,8 +270,8 @@ def delete_comment(comment_id):
     flash("Comment deleted successfully.", "success")
     return redirect(url_for("home"))
 
-@app.route("/like_post/<int:post_id>", methods=["POST"])
-def like_post(post_id):
+@app.route("/toggle_like/<int:post_id>", methods=["POST"])
+def toggle_like(post_id):
     if not is_logged_in():
         return redirect(url_for("login"))
 
@@ -288,18 +288,18 @@ def like_post(post_id):
     ).first()
 
     if existing_like:
-        flash("You already liked this post.", "error")
-        return redirect(url_for("home"))
+        db.session.delete(existing_like)
+        db.session.commit()
+        flash("Like removed.", "success")
+    else:
+        new_like = PostLike(
+            post_id=post_id,
+            user_id=current_user.id
+        )
+        db.session.add(new_like)
+        db.session.commit()
+        flash("Post liked!", "success")
 
-    new_like = PostLike(
-        post_id=post_id,
-        user_id=current_user.id
-    )
-
-    db.session.add(new_like)
-    db.session.commit()
-
-    flash("Post liked!", "success")
     return redirect(url_for("home"))
 
 @app.route("/groups")

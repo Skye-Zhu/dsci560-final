@@ -68,9 +68,15 @@
                     By {{ post.author.username }}
                     | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
                 </small>
+                {% set user_liked = likes | selectattr("post_id", "equalto", post.id)
+                           | selectattr("user_id", "equalto", current_user.id)
+                           | list | length > 0 %}
+
                 <div class="post-actions">
-                    <form method="POST" action="{{ url_for('like_post', post_id=post.id) }}" class="like-form">
-                        <button type="submit" class="like-button">❤️ Like</button>
+                    <form method="POST" action="{{ url_for('toggle_like', post_id=post.id) }}" class="like-form">
+                        <button type="submit" class="like-button {% if user_liked %}liked{% endif %}">
+                            {% if user_liked %}♥{% else %}♡{% endif %}
+                        </button>
                     </form>
 
                     {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
