@@ -222,6 +222,27 @@ def add_comment(post_id):
     flash("Comment added successfully!", "success")
     return redirect(url_for("home"))
 
+@app.route("/delete_comment/<int:comment_id>", methods=["POST"])
+def delete_comment(comment_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+
+    comment = next((c for c in comments if c["id"] == comment_id), None)
+
+    if not comment:
+        flash("Comment not found.", "error")
+        return redirect(url_for("home"))
+
+    if comment["author"] != current_user["username"]:
+        flash("You can only delete your own comments.", "error")
+        return redirect(url_for("home"))
+
+    comments.remove(comment)
+    flash("Comment deleted successfully.", "success")
+    return redirect(url_for("home"))
+
 @app.route("/groups")
 def group_list():
     if not is_logged_in():

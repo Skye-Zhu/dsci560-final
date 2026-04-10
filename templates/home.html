@@ -81,6 +81,12 @@
                             <div class="comment-card">
                                 <p>{{ comment.content }}</p>
                                 <small>{{ comment.author }} | {{ comment.timestamp }}</small>
+
+                                {% if comment.author == current_user.username %}
+                                    <form method="POST" action="{{ url_for('delete_comment', comment_id=comment.id) }}" class="delete-comment-form">
+                                        <button type="submit" class="delete-comment-button">Delete Comment</button>
+                                    </form>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}

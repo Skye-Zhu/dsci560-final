@@ -239,3 +239,21 @@ button:hover, .button-link:hover {
 .nav-search-input:focus {
     border-color: #1f4f82;
 }
+
+.delete-comment-form {
+    margin-top: 8px;
+}
+
+.delete-comment-button {
+    background: #d66;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.delete-comment-button:hover {
+    background: #b44;
+}
