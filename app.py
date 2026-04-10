@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from data import users, groups, memberships, public_posts, group_messages, comments
 from datetime import datetime
-from data import users, groups, memberships, public_posts, group_messages
 import os
 from werkzeug.utils import secure_filename
 
@@ -96,7 +96,19 @@ def home():
         return redirect(url_for("login"))
 
     current_user = get_current_user()
+    keyword = request.args.get("q", "").strip().lower()
+
     recent_posts = sorted(public_posts, key=lambda x: x["id"], reverse=True)
+
+    if keyword:
+        filtered_posts = [
+            p for p in recent_posts
+            if keyword in p["title"].lower()
+            or keyword in p["content"].lower()
+            or (p.get("location") and keyword in p["location"].lower())
+        ]
+    else:
+        filtered_posts = recent_posts
 
     user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user["id"]]
     my_groups = [g for g in groups if g["id"] in user_group_ids]
@@ -104,8 +116,10 @@ def home():
     return render_template(
         "home.html",
         current_user=current_user,
-        posts=recent_posts,
-        my_groups=my_groups
+        posts=filtered_posts,
+        my_groups=my_groups,
+        comments=comments,
+        keyword=request.args.get("q", "")
     )
 
 
@@ -179,6 +193,34 @@ def delete_public_post(post_id):
     flash("Post deleted successfully.", "success")
     return redirect(url_for("home"))
 
+@app.route("/add_comment/<int:post_id>", methods=["POST"])
+def add_comment(post_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+    content = request.form.get("content", "").strip()
+
+    post = next((p for p in public_posts if p["id"] == post_id), None)
+    if not post:
+        flash("Post not found.", "error")
+        return redirect(url_for("home"))
+
+    if not content:
+        flash("Comment cannot be empty.", "error")
+        return redirect(url_for("home"))
+
+    new_comment = {
+        "id": len(comments) + 1,
+        "post_id": post_id,
+        "content": content,
+        "author": current_user["username"],
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    comments.append(new_comment)
+
+    flash("Comment added successfully!", "success")
+    return redirect(url_for("home"))
 
 @app.route("/groups")
 def group_list():

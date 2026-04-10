@@ -14,6 +14,16 @@
             <a href="{{ url_for('group_list') }}">Groups</a>
         </div>
         <div class="nav-right">
+
+            <form method="GET" action="{{ url_for('home') }}" class="nav-search-form">
+                <input 
+                    type="text" 
+                    name="q" 
+                    placeholder="Search..." 
+                    class="nav-search-input"
+                >
+            </form>
+
             <span class="nav-user">Logged in as {{ session.get('username') }}</span>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>

@@ -4,6 +4,7 @@
 <h1>Home</h1>
 <p>Welcome, {{ current_user.username }}!</p>
 
+
 <div class="section">
     <h2>Create a Public Post</h2>
     <form method="POST" action="{{ url_for('create_public_post') }}" class="form" enctype="multipart/form-data">
@@ -40,6 +41,14 @@
 
 <div class="section">
     <h2>Public Feed</h2>
+
+    {% if keyword %}
+        <p class="search-result-text">
+            Showing results for "{{ keyword }}"
+            <a href="{{ url_for('home') }}">(Back to all posts)</a>
+        </p>
+    {% endif %}
+
     {% if posts %}
         {% for post in posts %}
             <div class="post-card">
@@ -47,23 +56,51 @@
 
                 <p>{{ post.content }}</p>
 
-                {% if post.image %}
-                    <img src="{{ url_for('static', filename='uploads/' + post.image) }}" class="post-image">
-                {% endif %}
                 {% if post.location %}
                     <p class="location-text">📍 {{ post.location }}</p>
                 {% endif %}
 
+                {% if post.image %}
+                    <img src="{{ url_for('static', filename='uploads/' + post.image) }}" class="post-image">
+                {% endif %}
+
                 <small>By {{ post.author }} | {{ post.timestamp }}</small>
+
                 {% if post.author == current_user.username %}
                     <form method="POST" action="{{ url_for('delete_public_post', post_id=post.id) }}" class="delete-form">
                         <button type="submit" class="delete-button">Delete</button>
                     </form>
                 {% endif %}
+
+                <div class="comment-section">
+                    <h4>Comments</h4>
+
+                    {% set post_comments = comments | selectattr("post_id", "equalto", post.id) | list %}
+                    {% if post_comments %}
+                        {% for comment in post_comments %}
+                            <div class="comment-card">
+                                <p>{{ comment.content }}</p>
+                                <small>{{ comment.author }} | {{ comment.timestamp }}</small>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-comment-text">No comments yet.</p>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}" class="comment-form">
+                        <input type="text" name="content" placeholder="Write a comment...">
+                        <button type="submit">Comment</button>
+                    </form>
+                </div>
             </div>
         {% endfor %}
     {% else %}
-        <p>No public posts yet.</p>
+        {% if keyword %}
+            <p>No posts matched your search.</p>
+        {% else %}
+            <p>No public posts yet.</p>
+        {% endif %}
     {% endif %}
 </div>
+
 {% endblock %}

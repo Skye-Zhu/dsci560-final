@@ -75,3 +75,20 @@ group_messages = [
         "timestamp": "2026-04-04 22:02",
     },
 ]
+
+comments = [
+    {
+        "id": 1,
+        "post_id": 1,
+        "content": "Nice catch! What bait did you use?",
+        "author": "alex",
+        "timestamp": "2026-04-05 12:00",
+    },
+    {
+        "id": 2,
+        "post_id": 1,
+        "content": "Marine del Rey has been active lately.",
+        "author": "skye",
+        "timestamp": "2026-04-05 12:15",
+    },
+]
