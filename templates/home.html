@@ -64,9 +64,12 @@
                     <img src="{{ url_for('static', filename='uploads/' + post.image) }}" class="post-image">
                 {% endif %}
 
-                <small>By {{ post.author }} | {{ post.timestamp }}</small>
+                <small>
+                    By {{ post.author.username }}
+                    | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
+                </small>
 
-                {% if post.author == current_user.username %}
+                {% if post.author_id == current_user.id %}
                     <form method="POST" action="{{ url_for('delete_public_post', post_id=post.id) }}" class="delete-form">
                         <button type="submit" class="delete-button">Delete</button>
                     </form>
@@ -80,9 +83,12 @@
                         {% for comment in post_comments %}
                             <div class="comment-card">
                                 <p>{{ comment.content }}</p>
-                                <small>{{ comment.author }} | {{ comment.timestamp }}</small>
+                                <small>
+                                    {{ comment.author.username }}
+                                    | {{ comment.created_at.strftime("%Y-%m-%d %H:%M") }}
+                                </small>
 
-                                {% if comment.author == current_user.username %}
+                                {% if comment.author_id == current_user.id %}
                                     <form method="POST" action="{{ url_for('delete_comment', comment_id=comment.id) }}" class="delete-comment-form">
                                         <button type="submit" class="delete-comment-button">Delete Comment</button>
                                     </form>
@@ -110,3 +116,4 @@
 </div>
 
 {% endblock %}
+

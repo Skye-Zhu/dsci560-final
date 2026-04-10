@@ -1,9 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from data import users, groups, memberships, public_posts, group_messages, comments
+from data import groups, memberships, group_messages
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
-from models import db, User
+from models import db, User, PublicPost, Comment, PostLike
+from sqlalchemy import or_
+
+
 
 
 app = Flask(__name__)
@@ -26,10 +29,10 @@ UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 def get_current_user():
-    username = session.get("username")
-    if not username:
+    user_id = session.get("user_id")
+    if not user_id:
         return None
-    return next((u for u in users if u["username"] == username), None)
+    return db.session.get(User, user_id)
 
 
 def is_logged_in():
@@ -64,7 +67,6 @@ def login():
     return render_template("login.html")
 
 
-from models import db, User
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -113,30 +115,35 @@ def home():
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-    keyword = request.args.get("q", "").strip().lower()
+    keyword = request.args.get("q", "").strip()
 
-    recent_posts = sorted(public_posts, key=lambda x: x["id"], reverse=True)
+    query = PublicPost.query
 
     if keyword:
-        filtered_posts = [
-            p for p in recent_posts
-            if keyword in p["title"].lower()
-            or keyword in p["content"].lower()
-            or (p.get("location") and keyword in p["location"].lower())
-        ]
-    else:
-        filtered_posts = recent_posts
+        query = query.filter(
+            or_(
+                PublicPost.title.ilike(f"%{keyword}%"),
+                PublicPost.content.ilike(f"%{keyword}%"),
+                PublicPost.location.ilike(f"%{keyword}%")
+            )
+        )
 
-    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user["id"]]
+    posts = query.order_by(PublicPost.created_at.desc()).all()
+
+    # 评论倒序
+    comments = Comment.query.order_by(Comment.created_at.desc()).all()
+
+    # 暂时 group 还用内存版
+    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
     my_groups = [g for g in groups if g["id"] in user_group_ids]
 
     return render_template(
         "home.html",
         current_user=current_user,
-        posts=filtered_posts,
+        posts=posts,
         my_groups=my_groups,
         comments=comments,
-        keyword=request.args.get("q", "")
+        keyword=keyword
     )
 
 
@@ -162,7 +169,6 @@ def create_public_post():
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
-        # 防止文件名重复
         counter = 1
         original_name, ext = os.path.splitext(filename)
 
@@ -174,17 +180,16 @@ def create_public_post():
         file.save(filepath)
         image_filename = filename
 
-    new_post = {
-        "id": len(public_posts) + 1,
-        "title": title,
-        "content": content,
-        "image": image_filename, 
-        "location": location if location else None,   
-        "author": current_user["username"],
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
+    new_post = PublicPost(
+        title=title,
+        content=content,
+        image=image_filename,
+        location=location if location else None,
+        author_id=current_user.id
+    )
 
-    public_posts.append(new_post)
+    db.session.add(new_post)
+    db.session.commit()
 
     flash("Post created successfully!", "success")
     return redirect(url_for("home"))
@@ -195,18 +200,19 @@ def delete_public_post(post_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-
-    post = next((p for p in public_posts if p["id"] == post_id), None)
+    post = db.session.get(PublicPost, post_id)
 
     if not post:
         flash("Post not found.", "error")
         return redirect(url_for("home"))
 
-    if post["author"] != current_user["username"]:
+    if post.author_id != current_user.id:
         flash("You can only delete your own posts.", "error")
         return redirect(url_for("home"))
 
-    public_posts.remove(post)
+    db.session.delete(post)
+    db.session.commit()
+
     flash("Post deleted successfully.", "success")
     return redirect(url_for("home"))
 
@@ -218,7 +224,7 @@ def add_comment(post_id):
     current_user = get_current_user()
     content = request.form.get("content", "").strip()
 
-    post = next((p for p in public_posts if p["id"] == post_id), None)
+    post = db.session.get(PublicPost, post_id)
     if not post:
         flash("Post not found.", "error")
         return redirect(url_for("home"))
@@ -227,14 +233,14 @@ def add_comment(post_id):
         flash("Comment cannot be empty.", "error")
         return redirect(url_for("home"))
 
-    new_comment = {
-        "id": len(comments) + 1,
-        "post_id": post_id,
-        "content": content,
-        "author": current_user["username"],
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-    comments.append(new_comment)
+    new_comment = Comment(
+        post_id=post_id,
+        author_id=current_user.id,
+        content=content
+    )
+
+    db.session.add(new_comment)
+    db.session.commit()
 
     flash("Comment added successfully!", "success")
     return redirect(url_for("home"))
@@ -245,18 +251,19 @@ def delete_comment(comment_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-
-    comment = next((c for c in comments if c["id"] == comment_id), None)
+    comment = db.session.get(Comment, comment_id)
 
     if not comment:
         flash("Comment not found.", "error")
         return redirect(url_for("home"))
 
-    if comment["author"] != current_user["username"]:
+    if comment.author_id != current_user.id:
         flash("You can only delete your own comments.", "error")
         return redirect(url_for("home"))
 
-    comments.remove(comment)
+    db.session.delete(comment)
+    db.session.commit()
+
     flash("Comment deleted successfully.", "success")
     return redirect(url_for("home"))
 
