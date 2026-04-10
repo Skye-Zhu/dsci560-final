@@ -257,3 +257,33 @@ button:hover, .button-link:hover {
 .delete-comment-button:hover {
     background: #b44;
 }
+
+.post-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.like-form {
+    margin: 0;
+}
+
+.like-button {
+    background: #f06292;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.like-button:hover {
+    background: #e91e63;
+}
+
+.like-count {
+    font-size: 13px;
+    color: #555;
+}

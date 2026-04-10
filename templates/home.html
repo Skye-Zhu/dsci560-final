@@ -68,6 +68,14 @@
                     By {{ post.author.username }}
                     | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
                 </small>
+                <div class="post-actions">
+                    <form method="POST" action="{{ url_for('like_post', post_id=post.id) }}" class="like-form">
+                        <button type="submit" class="like-button">❤️ Like</button>
+                    </form>
+
+                    {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
+                    <span class="like-count">{{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}</span>
+                </div>
 
                 {% if post.author_id == current_user.id %}
                     <form method="POST" action="{{ url_for('delete_public_post', post_id=post.id) }}" class="delete-form">

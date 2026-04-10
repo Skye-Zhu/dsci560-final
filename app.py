@@ -133,6 +133,8 @@ def home():
     # 评论倒序
     comments = Comment.query.order_by(Comment.created_at.desc()).all()
 
+    likes = PostLike.query.all()
+
     # 暂时 group 还用内存版
     user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
     my_groups = [g for g in groups if g["id"] in user_group_ids]
@@ -143,6 +145,7 @@ def home():
         posts=posts,
         my_groups=my_groups,
         comments=comments,
+        likes=likes,
         keyword=keyword
     )
 
@@ -265,6 +268,38 @@ def delete_comment(comment_id):
     db.session.commit()
 
     flash("Comment deleted successfully.", "success")
+    return redirect(url_for("home"))
+
+@app.route("/like_post/<int:post_id>", methods=["POST"])
+def like_post(post_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+    post = db.session.get(PublicPost, post_id)
+
+    if not post:
+        flash("Post not found.", "error")
+        return redirect(url_for("home"))
+
+    existing_like = PostLike.query.filter_by(
+        post_id=post_id,
+        user_id=current_user.id
+    ).first()
+
+    if existing_like:
+        flash("You already liked this post.", "error")
+        return redirect(url_for("home"))
+
+    new_like = PostLike(
+        post_id=post_id,
+        user_id=current_user.id
+    )
+
+    db.session.add(new_like)
+    db.session.commit()
+
+    flash("Post liked!", "success")
     return redirect(url_for("home"))
 
 @app.route("/groups")
