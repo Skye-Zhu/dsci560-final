@@ -68,6 +68,9 @@
                     By {{ post.author.username }}
                     | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
                 </small>
+                {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
+                {% set post_comment_count = comments | selectattr("post_id", "equalto", post.id) | list | length %}
+
                 {% set user_liked = likes | selectattr("post_id", "equalto", post.id)
                            | selectattr("user_id", "equalto", current_user.id)
                            | list | length > 0 %}
@@ -79,8 +82,11 @@
                         </button>
                     </form>
 
-                    {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
-                    <span class="like-count">{{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}</span>
+                    <span class="like-count">
+                        {{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}
+                        ·
+                        {{ post_comment_count }} comment{% if post_comment_count != 1 %}s{% endif %}
+                    </span>
                 </div>
 
                 {% if post.author_id == current_user.id %}
@@ -90,7 +96,7 @@
                 {% endif %}
 
                 <div class="comment-section">
-                    <h4>Comments</h4>
+                    <h4>Comments ({{ post_comment_count }})</h4>
 
                     {% set post_comments = comments | selectattr("post_id", "equalto", post.id) | list %}
                     {% if post_comments %}
