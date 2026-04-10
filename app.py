@@ -3,10 +3,24 @@ from data import users, groups, memberships, public_posts, group_messages, comme
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
+from models import db, User
 
 
 app = Flask(__name__)
-app.secret_key = "m1-secret-key"
+app.secret_key = "m2-mysql-secret-key"
+
+DB_USER = "root"
+DB_PASSWORD = "00000000"
+DB_HOST = "127.0.0.1"
+DB_PORT = "3306"
+DB_NAME = "fishing_platform"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db.init_app(app)
 
 UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -29,26 +43,28 @@ def index():
     return redirect(url_for("home"))
 
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
 
-        user = next(
-            (u for u in users if u["username"] == username and u["password"] == password),
-            None
-        )
+        user = User.query.filter_by(username=username).first()
 
-        if user:
-            session["username"] = user["username"]
-            flash("Login successful!", "success")
-            return redirect(url_for("home"))
-        else:
+        if not user or user.password != password:
             flash("Invalid username or password.", "error")
+            return redirect(url_for("login"))
+
+        session["user_id"] = user.id
+        session["username"] = user.username
+
+        return redirect(url_for("home"))
 
     return render_template("login.html")
 
+
+from models import db, User
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -65,17 +81,18 @@ def register():
             flash("Passwords do not match.", "error")
             return redirect(url_for("register"))
 
-        existing_user = next((u for u in users if u["username"] == username), None)
+        existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash("Username already exists.", "error")
             return redirect(url_for("register"))
 
-        new_user = {
-            "id": len(users) + 1,
-            "username": username,
-            "password": password
-        }
-        users.append(new_user)
+        new_user = User(
+            username=username,
+            password=password
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
 
         flash("Registration successful! Please log in.", "success")
         return redirect(url_for("login"))
@@ -359,4 +376,6 @@ def send_group_message(group_id):
 
 
 if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
