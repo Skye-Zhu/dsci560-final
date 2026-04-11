@@ -503,7 +503,7 @@ def send_group_message(group_id):
 
 
 #ai
-@app.route("/ask_ai", methods=["POST"])
+'''@app.route("/ask_ai", methods=["POST"])
 def ask_ai():
     query = request.form.get("query")
 
@@ -533,7 +533,67 @@ def ask_ai():
     Keep it short and clear.
     """)
 
-    return render_template("ai_result.html", result=response)
+    return render_template("ai_result.html", result=response)'''
+@app.route("/ask_ai", methods=["POST"])
+def ask_ai():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    query = request.form.get("query", "").strip()
+
+    if not query:
+        flash("Please enter a question.", "error")
+        return redirect(url_for("home"))
+
+    posts = PublicPost.query.filter(
+        or_(
+            PublicPost.title.ilike(f"%{query}%"),
+            PublicPost.content.ilike(f"%{query}%"),
+            PublicPost.location.ilike(f"%{query}%")
+        )
+    ).all()
+
+    if not posts:
+        return render_template(
+            "ai_result.html",
+            result=None,
+            query=query,
+            matched_posts=[],
+            no_data=True
+        )
+
+    combined_text = "\n\n".join(
+        [f"Title: {p.title}\nContent: {p.content}\nLocation: {p.location or 'N/A'}" for p in posts[:10]]
+    )
+
+    prompt = f"""
+You are a fishing knowledge assistant.
+
+Only use the community posts below. Do not make up information that is not supported by the posts.
+
+Community posts:
+{combined_text}
+
+Question: {query}
+
+Summarize only what can be inferred from these posts.
+If the posts do not contain enough information, say so clearly.
+Use this structure:
+- Key insights
+- Locations
+- Methods / bait
+- Limitations of available data
+"""
+
+    response = call_llm(prompt)
+
+    return render_template(
+        "ai_result.html",
+        result=response,
+        query=query,
+        matched_posts=posts[:10],
+        no_data=False
+    )
 
 
 if __name__ == "__main__":

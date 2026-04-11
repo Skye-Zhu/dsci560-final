@@ -3,11 +3,42 @@
 {% block content %}
 <div class="section">
     <h1>AI Insight</h1>
-    <p>Here is the AI-generated summary based on related fishing posts.</p>
 
-    <div class="ai-result-card">
-        <pre class="ai-result-text">{{ result }}</pre>
-    </div>
+    {% if query %}
+        <p><strong>Question:</strong> {{ query }}</p>
+    {% endif %}
+
+    {% if no_data %}
+        <div class="ai-result-card">
+            <p>No related community posts were found for this query yet.</p>
+            <p>The AI assistant needs user-generated fishing reports from the platform to produce evidence-based summaries.</p>
+        </div>
+    {% else %}
+        <p>Here is the AI-generated summary based on related fishing posts.</p>
+
+        <div class="ai-result-card">
+            <pre class="ai-result-text">{{ result }}</pre>
+        </div>
+
+        {% if matched_posts %}
+            <div class="section">
+                <h2>Matched Community Posts</h2>
+                {% for post in matched_posts %}
+                    <div class="post-card">
+                        <h3>{{ post.title }}</h3>
+                        <p>{{ post.content }}</p>
+                        {% if post.location %}
+                            <p class="location-text">📍 {{ post.location }}</p>
+                        {% endif %}
+                        <small>
+                            By {{ post.author.username }}
+                            | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
+                        </small>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endif %}
 
     <div style="margin-top: 20px;">
         <a href="{{ url_for('home') }}" class="button-link">Back to Home</a>
