@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from data import groups, memberships, group_messages
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
-from models import db, User, PublicPost, Comment, PostLike, CommentLike
+from models import (
+    db, User, PublicPost, Comment, PostLike, CommentLike,
+    Group, Membership, GroupMessage
+)
 from sqlalchemy import or_
 
 
@@ -38,6 +40,20 @@ def get_current_user():
 def is_logged_in():
     return "username" in session
 
+def seed_groups():
+    if Group.query.first():
+        return
+
+    demo_groups = [
+        Group(name="San Diego Charters", description="Discussions about charter fishing trips in San Diego"),
+        Group(name="LA Shore Fishing", description="Local shore fishing reports and tips in Los Angeles"),
+        Group(name="Tackle Tips", description="Talk about rods, reels, bait, and tackle setups"),
+        Group(name="Yellowtail Reports", description="Share yellowtail catches, methods, and trip reports"),
+        Group(name="Beginner Questions", description="A place for new anglers to ask beginner-friendly questions"),
+    ]
+
+    db.session.add_all(demo_groups)
+    db.session.commit()
 
 @app.route("/")
 def index():
@@ -138,9 +154,9 @@ def home():
     comments = Comment.query.order_by(Comment.created_at.desc()).all()
     likes = PostLike.query.all()
 
-    # groups 先继续用内存版
-    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
-    my_groups = [g for g in groups if g["id"] in user_group_ids]
+    memberships = Membership.query.filter_by(user_id=current_user.id).all()
+    user_group_ids = [m.group_id for m in memberships]
+    my_groups = Group.query.filter(Group.id.in_(user_group_ids)).all() if user_group_ids else []
 
     comment_likes = CommentLike.query.all()
 
@@ -343,23 +359,29 @@ def group_list():
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-    keyword = request.args.get("q", "").strip().lower()
+    keyword = request.args.get("q", "").strip()
 
-    filtered_groups = groups
+    query = Group.query
+
     if keyword:
-        filtered_groups = [
-            g for g in groups
-            if keyword in g["name"].lower() or keyword in g["description"].lower()
-        ]
+        query = query.filter(
+            or_(
+                Group.name.ilike(f"%{keyword}%"),
+                Group.description.ilike(f"%{keyword}%")
+            )
+        )
 
-    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
+    groups = query.order_by(Group.name.asc()).all()
+
+    memberships = Membership.query.filter_by(user_id=current_user.id).all()
+    user_group_ids = [m.group_id for m in memberships]
 
     return render_template(
         "groups.html",
         current_user=current_user,
-        groups=filtered_groups,
+        groups=groups,
         user_group_ids=user_group_ids,
-        keyword=request.args.get("q", "")
+        keyword=keyword
     )
 
 
@@ -369,20 +391,28 @@ def join_group(group_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
+    group = db.session.get(Group, group_id)
 
-    existing_membership = next(
-        (m for m in memberships if m["user_id"] == current_user.id and m["group_id"] == group_id),
-        None
-    )
+    if not group:
+        flash("Group not found.", "error")
+        return redirect(url_for("group_list"))
+
+    existing_membership = Membership.query.filter_by(
+        user_id=current_user.id,
+        group_id=group_id
+    ).first()
 
     if existing_membership:
         flash("You are already in this group.", "error")
         return redirect(url_for("group_detail", group_id=group_id))
 
-    memberships.append({
-        "user_id": current_user.id,
-        "group_id": group_id
-    })
+    new_membership = Membership(
+        user_id=current_user.id,
+        group_id=group_id
+    )
+
+    db.session.add(new_membership)
+    db.session.commit()
 
     flash("Joined group successfully!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
@@ -394,19 +424,18 @@ def group_detail(group_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-    group = next((g for g in groups if g["id"] == group_id), None)
+    group = db.session.get(Group, group_id)
 
     if not group:
         flash("Group not found.", "error")
         return redirect(url_for("group_list"))
 
-    is_member = any(
-        m["user_id"] == current_user.id and m["group_id"] == group_id
-        for m in memberships
-    )
+    is_member = Membership.query.filter_by(
+        user_id=current_user.id,
+        group_id=group_id
+    ).first() is not None
 
-    messages = [m for m in group_messages if m["group_id"] == group_id]
-    messages = sorted(messages, key=lambda x: x["id"])
+    messages = GroupMessage.query.filter_by(group_id=group_id).order_by(GroupMessage.created_at.asc()).all()
 
     return render_template(
         "group_detail.html",
@@ -423,11 +452,16 @@ def send_group_message(group_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
+    group = db.session.get(Group, group_id)
 
-    is_member = any(
-        m["user_id"] == current_user.id and m["group_id"] == group_id
-        for m in memberships
-    )
+    if not group:
+        flash("Group not found.", "error")
+        return redirect(url_for("group_list"))
+
+    is_member = Membership.query.filter_by(
+        user_id=current_user.id,
+        group_id=group_id
+    ).first()
 
     if not is_member:
         flash("You must join the group before sending messages.", "error")
@@ -439,14 +473,14 @@ def send_group_message(group_id):
         flash("Message cannot be empty.", "error")
         return redirect(url_for("group_detail", group_id=group_id))
 
-    new_message = {
-        "id": len(group_messages) + 1,
-        "group_id": group_id,
-        "content": content,
-        "author": current_user.username,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-    group_messages.append(new_message)
+    new_message = GroupMessage(
+        group_id=group_id,
+        author_id=current_user.id,
+        content=content
+    )
+
+    db.session.add(new_message)
+    db.session.commit()
 
     flash("Message sent!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
@@ -455,4 +489,5 @@ def send_group_message(group_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        seed_groups()
     app.run(debug=True)

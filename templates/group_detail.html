@@ -18,10 +18,10 @@
     <div class="chat-box">
         {% if messages %}
             {% for message in messages %}
-                <div class="chat-message {% if message.author == current_user.username %}my-message{% endif %}">
+                <div class="chat-message {% if message.author_id == current_user.id %}my-message{% endif %}">
                     <div class="chat-meta">
-                        <strong>{{ message.author }}</strong>
-                        <span>{{ message.timestamp }}</span>
+                        <strong>{{ message.author.username }}</strong>
+                        <span>{{ message.created_at.strftime("%Y-%m-%d %H:%M") }}</span>
                     </div>
                     <div class="chat-bubble">
                         {{ message.content }}
