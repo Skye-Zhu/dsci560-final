@@ -7,6 +7,8 @@ from models import (
     Group, Membership, GroupMessage
 )
 from sqlalchemy import or_
+import requests
+
 
 
 
@@ -54,6 +56,20 @@ def seed_groups():
 
     db.session.add_all(demo_groups)
     db.session.commit()
+
+def call_llm(prompt):
+    url = "http://localhost:11434/api/generate"
+
+    payload = {
+        "model": "llama3",
+        "prompt": prompt,
+        "stream": False
+    }
+
+    response = requests.post(url, json=payload)
+    data = response.json()
+
+    return data["response"]
 
 @app.route("/")
 def index():
@@ -484,6 +500,40 @@ def send_group_message(group_id):
 
     flash("Message sent!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
+
+
+#ai
+@app.route("/ask_ai", methods=["POST"])
+def ask_ai():
+    query = request.form.get("query")
+
+    # 找相关帖子（简单版：关键词匹配）
+    posts = PublicPost.query.filter(
+        PublicPost.content.ilike(f"%{query}%")
+    ).all()
+
+    combined_text = "\n".join([p.content for p in posts[:10]])
+
+    # 调用 LLM（先用简单 prompt）
+    response = call_llm(f"""
+    You are a fishing expert.
+
+    Based on the following fishing reports:
+
+    {combined_text}
+
+    Answer the question: {query}
+
+    Give a structured answer with:
+    - Best methods
+    - Best locations
+    - Tips
+    - Common mistakes
+
+    Keep it short and clear.
+    """)
+
+    return render_template("ai_result.html", result=response)
 
 
 if __name__ == "__main__":

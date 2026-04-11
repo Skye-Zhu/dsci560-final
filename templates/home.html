@@ -4,6 +4,13 @@
 <h1>Home</h1>
 <p>Welcome, {{ current_user.username }}!</p>
 
+<div class="section">
+    <h2>Ask AI</h2>
+    <form method="POST" action="{{ url_for('ask_ai') }}">
+        <input type="text" name="query" placeholder="e.g. How to catch yellowtail">
+        <button type="submit">Ask</button>
+    </form>
+</div>
 
 <div class="section">
     <h2>Create a Public Post</h2>

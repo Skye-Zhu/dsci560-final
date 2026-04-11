@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="section">
+    <h1>AI Insight</h1>
+    <p>Here is the AI-generated summary based on related fishing posts.</p>
+
+    <div class="ai-result-card">
+        <pre class="ai-result-text">{{ result }}</pre>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('home') }}" class="button-link">Back to Home</a>
+    </div>
+</div>
+{% endblock %}

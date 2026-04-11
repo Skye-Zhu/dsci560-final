@@ -433,3 +433,20 @@ button:hover, .button-link:hover {
 .my-message .chat-bubble {
     background: #dceeff;
 }
+
+.ai-result-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    margin-top: 16px;
+}
+
+.ai-result-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+}
