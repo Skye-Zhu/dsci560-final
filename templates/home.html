@@ -42,10 +42,21 @@
 <div class="section">
     <h2>Public Feed</h2>
 
+    <div class="feed-filter">
+        <a href="{{ url_for('home', view='all', q=keyword) }}"
+           class="filter-button {% if view == 'all' %}active-filter{% endif %}">
+            All Posts
+        </a>
+
+        <a href="{{ url_for('home', view='my', q=keyword) }}"
+           class="filter-button {% if view == 'my' %}active-filter{% endif %}">
+            My Posts
+        </a>
+    </div>
     {% if keyword %}
         <p class="search-result-text">
             Showing results for "{{ keyword }}"
-            <a href="{{ url_for('home') }}">(Back to all posts)</a>
+            <a href="{{ url_for('home', view=view) }}">(Clear search)</a>
         </p>
     {% endif %}
 

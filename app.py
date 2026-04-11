@@ -116,9 +116,15 @@ def home():
 
     current_user = get_current_user()
     keyword = request.args.get("q", "").strip()
+    view = request.args.get("view", "all").strip()   # all 或 my
 
     query = PublicPost.query
 
+    # My Posts 过滤
+    if view == "my":
+        query = query.filter(PublicPost.author_id == current_user.id)
+
+    # 搜索过滤
     if keyword:
         query = query.filter(
             or_(
@@ -129,13 +135,10 @@ def home():
         )
 
     posts = query.order_by(PublicPost.created_at.desc()).all()
-
-    # 评论倒序
     comments = Comment.query.order_by(Comment.created_at.desc()).all()
-
     likes = PostLike.query.all()
 
-    # 暂时 group 还用内存版
+    # groups 先继续用内存版
     user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
     my_groups = [g for g in groups if g["id"] in user_group_ids]
 
@@ -146,7 +149,8 @@ def home():
         my_groups=my_groups,
         comments=comments,
         likes=likes,
-        keyword=keyword
+        keyword=keyword,
+        view=view
     )
 
 

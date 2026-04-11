@@ -16,11 +16,13 @@
         <div class="nav-right">
 
             <form method="GET" action="{{ url_for('home') }}" class="nav-search-form">
+                <input type="hidden" name="view" value="{{ view if view is defined else 'all' }}">
                 <input 
                     type="text" 
                     name="q" 
                     placeholder="Search..." 
                     class="nav-search-input"
+                    value="{{ keyword if keyword is defined else '' }}"
                 >
             </form>
 
