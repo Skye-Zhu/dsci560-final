@@ -112,12 +112,30 @@
                     {% set post_comments = comments | selectattr("post_id", "equalto", post.id) | list %}
                     {% if post_comments %}
                         {% for comment in post_comments %}
+                            {% set user_liked_comment = comment_likes | selectattr("comment_id", "equalto", comment.id)
+                                                                    | selectattr("user_id", "equalto", current_user.id)
+                                                                    | list | length > 0 %}
+                            {% set comment_like_count = comment_likes | selectattr("comment_id", "equalto", comment.id) | list | length %}
+
                             <div class="comment-card">
                                 <p>{{ comment.content }}</p>
+
                                 <small>
                                     {{ comment.author.username }}
                                     | {{ comment.created_at.strftime("%Y-%m-%d %H:%M") }}
                                 </small>
+
+                                <div class="comment-actions">
+                                    <form method="POST" action="{{ url_for('toggle_comment_like', comment_id=comment.id) }}" class="comment-like-form">
+                                        <button type="submit" class="comment-like-button {% if user_liked_comment %}liked{% endif %}">
+                                            {% if user_liked_comment %}♥{% else %}♡{% endif %}
+                                        </button>
+                                    </form>
+
+                                    <span class="comment-like-count">
+                                        {{ comment_like_count }} like{% if comment_like_count != 1 %}s{% endif %}
+                                    </span>
+                                </div>
 
                                 {% if comment.author_id == current_user.id %}
                                     <form method="POST" action="{{ url_for('delete_comment', comment_id=comment.id) }}" class="delete-comment-form">
@@ -140,6 +158,8 @@
     {% else %}
         {% if keyword %}
             <p>No posts matched your search.</p>
+        {% elif view == "my" %}
+            <p>You haven't created any posts yet.</p>
         {% else %}
             <p>No public posts yet.</p>
         {% endif %}

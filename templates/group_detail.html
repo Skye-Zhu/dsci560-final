@@ -18,9 +18,14 @@
     <div class="chat-box">
         {% if messages %}
             {% for message in messages %}
-                <div class="message-card">
-                    <p>{{ message.content }}</p>
-                    <small>{{ message.author }} | {{ message.timestamp }}</small>
+                <div class="chat-message {% if message.author == current_user.username %}my-message{% endif %}">
+                    <div class="chat-meta">
+                        <strong>{{ message.author }}</strong>
+                        <span>{{ message.timestamp }}</span>
+                    </div>
+                    <div class="chat-bubble">
+                        {{ message.content }}
+                    </div>
                 </div>
             {% endfor %}
         {% else %}

@@ -3,7 +3,7 @@ from data import groups, memberships, group_messages
 from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
-from models import db, User, PublicPost, Comment, PostLike
+from models import db, User, PublicPost, Comment, PostLike, CommentLike
 from sqlalchemy import or_
 
 
@@ -142,6 +142,8 @@ def home():
     user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
     my_groups = [g for g in groups if g["id"] in user_group_ids]
 
+    comment_likes = CommentLike.query.all()
+
     return render_template(
         "home.html",
         current_user=current_user,
@@ -149,6 +151,7 @@ def home():
         my_groups=my_groups,
         comments=comments,
         likes=likes,
+        comment_likes=comment_likes,
         keyword=keyword,
         view=view
     )
@@ -306,6 +309,34 @@ def toggle_like(post_id):
 
     return redirect(url_for("home"))
 
+@app.route("/toggle_comment_like/<int:comment_id>", methods=["POST"])
+def toggle_comment_like(comment_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+    comment = db.session.get(Comment, comment_id)
+
+    if not comment:
+        return redirect(url_for("home"))
+
+    existing_like = CommentLike.query.filter_by(
+        comment_id=comment_id,
+        user_id=current_user.id
+    ).first()
+
+    if existing_like:
+        db.session.delete(existing_like)
+    else:
+        new_like = CommentLike(
+            comment_id=comment_id,
+            user_id=current_user.id
+        )
+        db.session.add(new_like)
+
+    db.session.commit()
+    return redirect(url_for("home"))
+
 @app.route("/groups")
 def group_list():
     if not is_logged_in():
@@ -321,7 +352,7 @@ def group_list():
             if keyword in g["name"].lower() or keyword in g["description"].lower()
         ]
 
-    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user["id"]]
+    user_group_ids = [m["group_id"] for m in memberships if m["user_id"] == current_user.id]
 
     return render_template(
         "groups.html",
@@ -340,7 +371,7 @@ def join_group(group_id):
     current_user = get_current_user()
 
     existing_membership = next(
-        (m for m in memberships if m["user_id"] == current_user["id"] and m["group_id"] == group_id),
+        (m for m in memberships if m["user_id"] == current_user.id and m["group_id"] == group_id),
         None
     )
 
@@ -349,7 +380,7 @@ def join_group(group_id):
         return redirect(url_for("group_detail", group_id=group_id))
 
     memberships.append({
-        "user_id": current_user["id"],
+        "user_id": current_user.id,
         "group_id": group_id
     })
 
@@ -370,7 +401,7 @@ def group_detail(group_id):
         return redirect(url_for("group_list"))
 
     is_member = any(
-        m["user_id"] == current_user["id"] and m["group_id"] == group_id
+        m["user_id"] == current_user.id and m["group_id"] == group_id
         for m in memberships
     )
 
@@ -394,7 +425,7 @@ def send_group_message(group_id):
     current_user = get_current_user()
 
     is_member = any(
-        m["user_id"] == current_user["id"] and m["group_id"] == group_id
+        m["user_id"] == current_user.id and m["group_id"] == group_id
         for m in memberships
     )
 
@@ -412,7 +443,7 @@ def send_group_message(group_id):
         "id": len(group_messages) + 1,
         "group_id": group_id,
         "content": content,
-        "author": current_user["username"],
+        "author": current_user.username,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
     group_messages.append(new_message)
