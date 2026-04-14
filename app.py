@@ -152,11 +152,10 @@ def home():
 
     query = PublicPost.query
 
-    # My Posts 过滤
+
     if view == "my":
         query = query.filter(PublicPost.author_id == current_user.id)
 
-    # 搜索过滤
     if keyword:
         query = query.filter(
             or_(
