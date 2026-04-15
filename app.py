@@ -3,9 +3,10 @@ from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
 from models import (
-    db, User, PublicPost, Comment, PostLike, CommentLike,
-    Group, Membership, GroupMessage, GroupPost
+    db, User, Post, Comment, PostLike, CommentLike,
+    Group, Membership, GroupMessage
 )
+from sqlalchemy import or_
 from sqlalchemy import or_
 import requests
 
@@ -148,32 +149,37 @@ def home():
 
     current_user = get_current_user()
     keyword = request.args.get("q", "").strip()
-    view = request.args.get("view", "all").strip()   # all 或 my
+    view = request.args.get("view", "all").strip()
+    group_filter = request.args.get("group_id", "").strip()
 
-    query = PublicPost.query
+    query = Post.query
 
-
-    if view == "my":
-        query = query.filter(PublicPost.author_id == current_user.id)
+    # Home 默认只显示 public posts
+    if group_filter:
+        query = query.filter(Post.visibility == "group", Post.group_id == int(group_filter))
+    else:
+        if view == "my":
+            query = query.filter(Post.author_id == current_user.id)
+        else:
+            query = query.filter(Post.visibility == "public")
 
     if keyword:
         query = query.filter(
             or_(
-                PublicPost.title.ilike(f"%{keyword}%"),
-                PublicPost.content.ilike(f"%{keyword}%"),
-                PublicPost.location.ilike(f"%{keyword}%")
+                Post.title.ilike(f"%{keyword}%"),
+                Post.content.ilike(f"%{keyword}%"),
+                Post.location.ilike(f"%{keyword}%")
             )
         )
 
-    posts = query.order_by(PublicPost.created_at.desc()).all()
+    posts = query.order_by(Post.created_at.desc()).all()
     comments = Comment.query.order_by(Comment.created_at.desc()).all()
     likes = PostLike.query.all()
+    comment_likes = CommentLike.query.all()
 
     memberships = Membership.query.filter_by(user_id=current_user.id).all()
     user_group_ids = [m.group_id for m in memberships]
     my_groups = Group.query.filter(Group.id.in_(user_group_ids)).all() if user_group_ids else []
-
-    comment_likes = CommentLike.query.all()
 
     return render_template(
         "home.html",
@@ -184,7 +190,8 @@ def home():
         likes=likes,
         comment_likes=comment_likes,
         keyword=keyword,
-        view=view
+        view=view,
+        group_filter=group_filter
     )
 
 
@@ -198,6 +205,8 @@ def create_public_post():
     title = request.form.get("title", "").strip()
     content = request.form.get("content", "").strip()
     location = request.form.get("location", "").strip()
+    visibility = request.form.get("visibility", "public").strip()
+    group_id = request.form.get("group_id", "").strip()
     file = request.files.get("image")
 
     if not title or not content:
@@ -221,11 +230,31 @@ def create_public_post():
         file.save(filepath)
         image_filename = filename
 
-    new_post = PublicPost(
+    selected_group_id = None
+
+    if visibility == "group":
+        if not group_id:
+            flash("Please select a group.", "error")
+            return redirect(url_for("home"))
+
+        selected_group_id = int(group_id)
+
+        membership = Membership.query.filter_by(
+            user_id=current_user.id,
+            group_id=selected_group_id
+        ).first()
+
+        if not membership:
+            flash("You can only post to groups you joined.", "error")
+            return redirect(url_for("home"))
+
+    new_post = Post(
         title=title,
         content=content,
         image=image_filename,
         location=location if location else None,
+        visibility=visibility,
+        group_id=selected_group_id,
         author_id=current_user.id
     )
 
@@ -241,7 +270,7 @@ def delete_public_post(post_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-    post = db.session.get(PublicPost, post_id)
+    post = db.session.get(Post, post_id)
 
     if not post:
         flash("Post not found.", "error")
@@ -265,7 +294,7 @@ def add_comment(post_id):
     current_user = get_current_user()
     content = request.form.get("content", "").strip()
 
-    post = db.session.get(PublicPost, post_id)
+    post = db.session.get(Post, post_id)
     if not post:
         flash("Post not found.", "error")
         return redirect(url_for("home"))
@@ -314,7 +343,7 @@ def toggle_like(post_id):
         return redirect(url_for("login"))
 
     current_user = get_current_user()
-    post = db.session.get(PublicPost, post_id)
+    post = db.session.get(Post, post_id)
 
     if not post:
         flash("Post not found.", "error")
@@ -451,7 +480,7 @@ def group_detail(group_id):
     ).first() is not None
 
     messages = GroupMessage.query.filter_by(group_id=group_id).order_by(GroupMessage.created_at.asc()).all()
-    group_posts = GroupPost.query.filter_by(group_id=group_id).order_by(GroupPost.created_at.desc()).all()
+    group_posts = Post.query.filter_by(group_id=group_id, visibility="group").order_by(Post.created_at.desc()).all()
 
     return render_template(
         "group_detail.html",
@@ -502,67 +531,6 @@ def send_group_message(group_id):
     flash("Message sent!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
 
-@app.route("/create_group_post/<int:group_id>", methods=["POST"])
-def create_group_post(group_id):
-    if not is_logged_in():
-        return redirect(url_for("login"))
-
-    current_user = get_current_user()
-    group = db.session.get(Group, group_id)
-
-    if not group:
-        flash("Group not found.", "error")
-        return redirect(url_for("group_list"))
-
-    is_member = Membership.query.filter_by(
-        user_id=current_user.id,
-        group_id=group_id
-    ).first()
-
-    if not is_member:
-        flash("You must join the group before posting.", "error")
-        return redirect(url_for("group_detail", group_id=group_id))
-
-    title = request.form.get("title", "").strip()
-    content = request.form.get("content", "").strip()
-    location = request.form.get("location", "").strip()
-    file = request.files.get("image")
-
-    if not title or not content:
-        flash("Title and content cannot be empty.", "error")
-        return redirect(url_for("group_detail", group_id=group_id))
-
-    image_filename = None
-
-    if file and file.filename != "":
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-
-        counter = 1
-        original_name, ext = os.path.splitext(filename)
-
-        while os.path.exists(filepath):
-            filename = f"{original_name}_{counter}{ext}"
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-            counter += 1
-
-        file.save(filepath)
-        image_filename = filename
-
-    new_group_post = GroupPost(
-        title=title,
-        content=content,
-        image=image_filename,
-        location=location if location else None,
-        group_id=group_id,
-        author_id=current_user.id
-    )
-
-    db.session.add(new_group_post)
-    db.session.commit()
-
-    flash("Group post created successfully!", "success")
-    return redirect(url_for("group_detail", group_id=group_id))
 
 
 #ai
@@ -608,11 +576,12 @@ def ask_ai():
         flash("Please enter a question.", "error")
         return redirect(url_for("home"))
 
-    posts = PublicPost.query.filter(
+    posts = Post.query.filter(
+        Post.visibility == "public",
         or_(
-            PublicPost.title.ilike(f"%{query}%"),
-            PublicPost.content.ilike(f"%{query}%"),
-            PublicPost.location.ilike(f"%{query}%")
+            Post.title.ilike(f"%{query}%"),
+            Post.content.ilike(f"%{query}%"),
+            Post.location.ilike(f"%{query}%")
         )
     ).all()
 
