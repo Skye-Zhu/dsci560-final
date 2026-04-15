@@ -101,3 +101,19 @@ class GroupMessage(db.Model):
 
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+class GroupPost(db.Model):
+    __tablename__ = "group_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    image = db.Column(db.String(255), nullable=True)
+    location = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    group = db.relationship("Group", backref=db.backref("group_posts", lazy=True, cascade="all, delete-orphan"))
+    author = db.relationship("User", backref=db.backref("group_posts", lazy=True))

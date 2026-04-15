@@ -4,7 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 from models import (
     db, User, PublicPost, Comment, PostLike, CommentLike,
-    Group, Membership, GroupMessage
+    Group, Membership, GroupMessage, GroupPost
 )
 from sqlalchemy import or_
 import requests
@@ -452,13 +452,15 @@ def group_detail(group_id):
     ).first() is not None
 
     messages = GroupMessage.query.filter_by(group_id=group_id).order_by(GroupMessage.created_at.asc()).all()
+    group_posts = GroupPost.query.filter_by(group_id=group_id).order_by(GroupPost.created_at.desc()).all()
 
     return render_template(
         "group_detail.html",
         current_user=current_user,
         group=group,
         is_member=is_member,
-        messages=messages
+        messages=messages,
+        group_posts=group_posts
     )
 
 
@@ -499,6 +501,68 @@ def send_group_message(group_id):
     db.session.commit()
 
     flash("Message sent!", "success")
+    return redirect(url_for("group_detail", group_id=group_id))
+
+@app.route("/create_group_post/<int:group_id>", methods=["POST"])
+def create_group_post(group_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+    group = db.session.get(Group, group_id)
+
+    if not group:
+        flash("Group not found.", "error")
+        return redirect(url_for("group_list"))
+
+    is_member = Membership.query.filter_by(
+        user_id=current_user.id,
+        group_id=group_id
+    ).first()
+
+    if not is_member:
+        flash("You must join the group before posting.", "error")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    title = request.form.get("title", "").strip()
+    content = request.form.get("content", "").strip()
+    location = request.form.get("location", "").strip()
+    file = request.files.get("image")
+
+    if not title or not content:
+        flash("Title and content cannot be empty.", "error")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    image_filename = None
+
+    if file and file.filename != "":
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+
+        counter = 1
+        original_name, ext = os.path.splitext(filename)
+
+        while os.path.exists(filepath):
+            filename = f"{original_name}_{counter}{ext}"
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            counter += 1
+
+        file.save(filepath)
+        image_filename = filename
+
+    new_group_post = GroupPost(
+        title=title,
+        content=content,
+        image=image_filename,
+        location=location if location else None,
+        group_id=group_id,
+        author_id=current_user.id
+    )
+
+    db.session.add(new_group_post)
+    db.session.commit()
+
+    flash("Group post created successfully!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
 
 
