@@ -154,15 +154,19 @@ def home():
 
     query = Post.query
 
-    # Home 默认只显示 public posts
+    # 先处理帖子范围
     if group_filter:
-        query = query.filter(Post.visibility == "group", Post.group_id == int(group_filter))
+        query = query.filter(
+            Post.visibility == "group",
+            Post.group_id == int(group_filter)
+        )
     else:
         if view == "my":
             query = query.filter(Post.author_id == current_user.id)
         else:
             query = query.filter(Post.visibility == "public")
 
+    # 搜索
     if keyword:
         query = query.filter(
             or_(
@@ -181,6 +185,10 @@ def home():
     user_group_ids = [m.group_id for m in memberships]
     my_groups = Group.query.filter(Group.id.in_(user_group_ids)).all() if user_group_ids else []
 
+    selected_group = None
+    if group_filter:
+        selected_group = db.session.get(Group, int(group_filter))
+
     return render_template(
         "home.html",
         current_user=current_user,
@@ -191,9 +199,9 @@ def home():
         comment_likes=comment_likes,
         keyword=keyword,
         view=view,
-        group_filter=group_filter
+        group_filter=group_filter,
+        selected_group=selected_group
     )
-
 
 @app.route("/create_public_post", methods=["POST"])
 def create_public_post():

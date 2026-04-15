@@ -62,7 +62,15 @@
 </div>
 
 <div class="section">
-    <h2>Public Feed</h2>
+    <h2>
+        {% if selected_group %}
+            Posts from {{ selected_group.name }}
+        {% elif view == "my" %}
+            My Posts
+        {% else %}
+            Public Feed
+        {% endif %}
+    </h2>
 
     <div class="feed-filter">
         <a href="{{ url_for('home', view='all', q=keyword) }}"
@@ -75,10 +83,27 @@
             My Posts
         </a>
     </div>
+    <form method="GET" action="{{ url_for('home') }}" class="group-filter-form">
+        <input type="hidden" name="q" value="{{ keyword }}">
+        <label for="group-filter-select">View Group Posts:</label>
+        <select name="group_id" id="group-filter-select" onchange="this.form.submit()">
+            <option value="">-- Select a group --</option>
+            {% for group in my_groups %}
+                <option value="{{ group.id }}" {% if group_filter == group.id|string %}selected{% endif %}>
+                    {{ group.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% if group_filter %}
+        <div style="margin-top: 10px;">
+            <a href="{{ url_for('home', view='all') }}" class="filter-button">Back to Public Feed</a>
+        </div>
+    {% endif %}
     {% if keyword %}
         <p class="search-result-text">
             Showing results for "{{ keyword }}"
-            <a href="{{ url_for('home', view=view) }}">(Clear search)</a>
+            <a href="{{ url_for('home', view=view, group_id=group_filter) }}">(Clear search)</a>
         </p>
     {% endif %}
 

@@ -450,3 +450,19 @@ button:hover, .button-link:hover {
     line-height: 1.6;
     margin: 0;
 }
+
+#group-select-wrapper {
+    margin-top: 10px;
+}
+
+.group-filter-form {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.group-filter-form label {
+    font-size: 14px;
+    color: #444;
+}
