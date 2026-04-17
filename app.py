@@ -9,6 +9,7 @@ from models import (
 from sqlalchemy import or_
 from sqlalchemy import or_
 import requests
+from flask import jsonify
 
 
 
@@ -71,6 +72,13 @@ def call_llm(prompt):
     data = response.json()
 
     return data["response"]
+
+def redirect_back_to_home():
+    view = request.form.get("view", "all")
+    group_id = request.form.get("group_id", "")
+    keyword = request.form.get("q", "")
+
+    return redirect(url_for("home", view=view, group_id=group_id, q=keyword))
 
 @app.route("/")
 def index():
@@ -206,7 +214,7 @@ def home():
 @app.route("/create_public_post", methods=["POST"])
 def create_public_post():
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
 
@@ -218,8 +226,7 @@ def create_public_post():
     file = request.files.get("image")
 
     if not title or not content:
-        flash("Title and content cannot be empty.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Title and content cannot be empty."}), 400
 
     image_filename = None
 
@@ -239,11 +246,11 @@ def create_public_post():
         image_filename = filename
 
     selected_group_id = None
+    selected_group_name = None
 
     if visibility == "group":
         if not group_id:
-            flash("Please select a group.", "error")
-            return redirect(url_for("home"))
+            return jsonify({"success": False, "error": "Please select a group."}), 400
 
         selected_group_id = int(group_id)
 
@@ -253,8 +260,10 @@ def create_public_post():
         ).first()
 
         if not membership:
-            flash("You can only post to groups you joined.", "error")
-            return redirect(url_for("home"))
+            return jsonify({"success": False, "error": "You can only post to groups you joined."}), 403
+
+        selected_group = db.session.get(Group, selected_group_id)
+        selected_group_name = selected_group.name if selected_group else None
 
     new_post = Post(
         title=title,
@@ -269,47 +278,64 @@ def create_public_post():
     db.session.add(new_post)
     db.session.commit()
 
-    flash("Post created successfully!", "success")
-    return redirect(url_for("home"))
+    return jsonify({
+        "success": True,
+        "post": {
+            "id": new_post.id,
+            "title": new_post.title,
+            "content": new_post.content,
+            "location": new_post.location,
+            "image": new_post.image,
+            "created_at": new_post.created_at.strftime("%Y-%m-%d %H:%M"),
+            "author": current_user.username,
+            "author_id": current_user.id,
+            "visibility": new_post.visibility,
+            "group_id": new_post.group_id,
+            "group_name": selected_group_name
+        }
+    })
 
 @app.route("/delete_public_post/<int:post_id>", methods=["POST"])
 def delete_public_post(post_id):
+
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
+
     post = db.session.get(Post, post_id)
+  
 
     if not post:
-        flash("Post not found.", "error")
-        return redirect(url_for("home"))
+        all_posts = Post.query.all()
+        print("all Post ids =", [p.id for p in all_posts])
+        return jsonify({"success": False, "error": "Post not found"}), 404
 
     if post.author_id != current_user.id:
-        flash("You can only delete your own posts.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     db.session.delete(post)
     db.session.commit()
 
-    flash("Post deleted successfully.", "success")
-    return redirect(url_for("home"))
+    return jsonify({
+        "success": True,
+        "post_id": post_id
+    })
 
 @app.route("/add_comment/<int:post_id>", methods=["POST"])
 def add_comment(post_id):
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
     content = request.form.get("content", "").strip()
 
     post = db.session.get(Post, post_id)
     if not post:
-        flash("Post not found.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Post not found"}), 404
 
     if not content:
-        flash("Comment cannot be empty.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Comment cannot be empty"}), 400
 
     new_comment = Comment(
         post_id=post_id,
@@ -320,42 +346,56 @@ def add_comment(post_id):
     db.session.add(new_comment)
     db.session.commit()
 
-    flash("Comment added successfully!", "success")
-    return redirect(url_for("home"))
+    return jsonify({
+        "success": True,
+        "comment": {
+            "id": new_comment.id,
+            "content": new_comment.content,
+            "author": current_user.username,
+            "author_id": current_user.id,
+            "created_at": new_comment.created_at.strftime("%Y-%m-%d %H:%M")
+        }
+    })
 
 @app.route("/delete_comment/<int:comment_id>", methods=["POST"])
 def delete_comment(comment_id):
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
     comment = db.session.get(Comment, comment_id)
 
     if not comment:
-        flash("Comment not found.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Comment not found"}), 404
 
     if comment.author_id != current_user.id:
-        flash("You can only delete your own comments.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+    post_id = comment.post_id
 
     db.session.delete(comment)
     db.session.commit()
 
-    flash("Comment deleted successfully.", "success")
-    return redirect(url_for("home"))
+    remaining_count = Comment.query.filter_by(post_id=post_id).count()
+
+    return jsonify({
+        "success": True,
+        "comment_id": comment_id,
+        "post_id": post_id,
+        "remaining_count": remaining_count
+    })
+
 
 @app.route("/toggle_like/<int:post_id>", methods=["POST"])
 def toggle_like(post_id):
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
     post = db.session.get(Post, post_id)
 
     if not post:
-        flash("Post not found.", "error")
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Post not found"}), 404
 
     existing_like = PostLike.query.filter_by(
         post_id=post_id,
@@ -364,29 +404,35 @@ def toggle_like(post_id):
 
     if existing_like:
         db.session.delete(existing_like)
-        db.session.commit()
-        flash("Like removed.", "success")
+        liked = False
     else:
         new_like = PostLike(
             post_id=post_id,
             user_id=current_user.id
         )
         db.session.add(new_like)
-        db.session.commit()
-        flash("Post liked!", "success")
+        liked = True
 
-    return redirect(url_for("home"))
+    db.session.commit()
+
+    like_count = PostLike.query.filter_by(post_id=post_id).count()
+
+    return jsonify({
+        "success": True,
+        "liked": liked,
+        "like_count": like_count
+    })
 
 @app.route("/toggle_comment_like/<int:comment_id>", methods=["POST"])
 def toggle_comment_like(comment_id):
     if not is_logged_in():
-        return redirect(url_for("login"))
+        return jsonify({"success": False, "error": "Not logged in"}), 401
 
     current_user = get_current_user()
     comment = db.session.get(Comment, comment_id)
 
     if not comment:
-        return redirect(url_for("home"))
+        return jsonify({"success": False, "error": "Comment not found"}), 404
 
     existing_like = CommentLike.query.filter_by(
         comment_id=comment_id,
@@ -395,15 +441,24 @@ def toggle_comment_like(comment_id):
 
     if existing_like:
         db.session.delete(existing_like)
+        liked = False
     else:
         new_like = CommentLike(
             comment_id=comment_id,
             user_id=current_user.id
         )
         db.session.add(new_like)
+        liked = True
 
     db.session.commit()
-    return redirect(url_for("home"))
+
+    like_count = CommentLike.query.filter_by(comment_id=comment_id).count()
+
+    return jsonify({
+        "success": True,
+        "liked": liked,
+        "like_count": like_count
+    })
 
 @app.route("/groups")
 def group_list():
@@ -487,18 +542,23 @@ def group_detail(group_id):
         group_id=group_id
     ).first() is not None
 
-    messages = GroupMessage.query.filter_by(group_id=group_id).order_by(GroupMessage.created_at.asc()).all()
-    group_posts = Post.query.filter_by(group_id=group_id, visibility="group").order_by(Post.created_at.desc()).all()
+    group_posts = Post.query.filter_by(
+        visibility="group",
+        group_id=group_id
+    ).order_by(Post.created_at.desc()).all()
+
+    messages = GroupMessage.query.filter_by(
+        group_id=group_id
+    ).order_by(GroupMessage.created_at.asc()).all()
 
     return render_template(
         "group_detail.html",
         current_user=current_user,
         group=group,
         is_member=is_member,
-        messages=messages,
-        group_posts=group_posts
+        group_posts=group_posts,
+        messages=messages
     )
-
 
 @app.route("/send_group_message/<int:group_id>", methods=["POST"])
 def send_group_message(group_id):
