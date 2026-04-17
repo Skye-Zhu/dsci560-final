@@ -633,6 +633,8 @@ def ask_ai():
     """)
 
     return render_template("ai_result.html", result=response)'''
+
+#ai
 @app.route("/ask_ai", methods=["POST"])
 def ask_ai():
     if not is_logged_in():
@@ -692,6 +694,112 @@ Use this structure:
         result=response,
         query=query,
         matched_posts=posts[:10],
+        no_data=False
+    )
+
+
+@app.route("/ask_group_ai/<int:group_id>", methods=["POST"])
+def ask_group_ai(group_id):
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+    group = db.session.get(Group, group_id)
+
+    if not group:
+        flash("Group not found.", "error")
+        return redirect(url_for("group_list"))
+
+    is_member = Membership.query.filter_by(
+        user_id=current_user.id,
+        group_id=group_id
+    ).first()
+
+    if not is_member:
+        flash("You must join this group to use Group AI.", "error")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    query = request.form.get("query", "").strip()
+
+    if not query:
+        flash("Please enter a question.", "error")
+        return redirect(url_for("group_detail", group_id=group_id))
+
+    group_posts = Post.query.filter_by(
+        visibility="group",
+        group_id=group_id
+    ).all()
+
+    group_messages = GroupMessage.query.filter_by(
+        group_id=group_id
+    ).all()
+
+    matched_posts = [
+        p for p in group_posts
+        if query.lower() in (p.title or "").lower()
+        or query.lower() in (p.content or "").lower()
+        or (p.location and query.lower() in p.location.lower())
+    ]
+
+    matched_messages = [
+        m for m in group_messages
+        if query.lower() in (m.content or "").lower()
+    ]
+
+    if not matched_posts and not matched_messages:
+        return render_template(
+            "group_ai_result.html",
+            group=group,
+            query=query,
+            result=None,
+            matched_posts=[],
+            matched_messages=[],
+            no_data=True
+        )
+
+    post_text = "\n\n".join([
+        f"[Group Post]\nTitle: {p.title}\nContent: {p.content}\nLocation: {p.location or 'N/A'}"
+        for p in matched_posts[:10]
+    ])
+
+    message_text = "\n\n".join([
+        f"[Group Message]\nAuthor: {m.author.username}\nContent: {m.content}"
+        for m in matched_messages[:15]
+    ])
+
+    combined_text = "\n\n".join([post_text, message_text]).strip()
+
+    prompt = f"""
+You are a fishing assistant for a specific fishing group.
+
+You must ONLY use the group content below.
+Do not make up information that is not supported by the content.
+If the content is insufficient, say so clearly.
+
+Group name: {group.name}
+
+Group content:
+{combined_text}
+
+Question: {query}
+
+Provide a structured answer with:
+- Key insights
+- Common methods or bait
+- Locations mentioned
+- What this group seems to recommend
+- Limitations of available data
+"""
+
+    response = call_llm(prompt)
+
+    return render_template(
+        "group_ai_result.html",
+        group=group,
+        query=query,
+        result=response,
+        matched_posts=matched_posts[:10],
+        matched_messages=matched_messages[:15],
         no_data=False
     )
 
