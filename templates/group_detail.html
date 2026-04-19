@@ -20,9 +20,21 @@
         <h2>Ask Group AI</h2>
         {% if is_member %}
             <form method="POST" action="{{ url_for('ask_group_ai', group_id=group.id) }}" class="form">
-                <input type="text" name="query" placeholder="e.g. What are people in this group saying about yellowtail?">
+                <input type="text" name="query" id="group-ai-input" placeholder="e.g. What are people in this group saying about yellowtail?">
                 <button type="submit">Ask Group AI</button>
             </form>
+
+            <div class="ai-shortcuts">
+                <button type="button" class="shortcut-button" onclick="fillGroupAIQuery('Summarize this group this week')">
+                    Summarize This Group
+                </button>
+                <button type="button" class="shortcut-button" onclick="fillGroupAIQuery('What recent fishing reports are in this group?')">
+                    Recent Reports
+                </button>
+                <button type="button" class="shortcut-button" onclick="fillGroupAIQuery('What fishing methods are commonly mentioned in this group?')">
+                    Common Methods
+                </button>
+            </div>
         {% else %}
             <p>You need to join this group to use Group AI.</p>
         {% endif %}
@@ -87,4 +99,15 @@
         <p>You need to join this group before sending messages.</p>
     {% endif %}
 </div>
+
+<script>
+function fillGroupAIQuery(text) {
+    const input = document.getElementById("group-ai-input");
+    if (input) {
+        input.value = text;
+        input.focus();
+    }
+}
+</script>
+
 {% endblock %}

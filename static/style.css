@@ -515,3 +515,24 @@ button:hover, .button-link:hover {
         pointer-events: none;
     }
 }
+
+.ai-shortcuts {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.shortcut-button {
+    background: white;
+    border: 1px solid #cfd8e3;
+    color: #1f4f82;
+    padding: 8px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.shortcut-button:hover {
+    background: #eef3f9;
+}

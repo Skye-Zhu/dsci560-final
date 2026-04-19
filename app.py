@@ -669,23 +669,27 @@ def ask_ai():
     )
 
     prompt = f"""
-You are a fishing knowledge assistant.
+    You are an AI assistant for a fishing knowledge platform.
 
-Only use the community posts below. Do not make up information that is not supported by the posts.
+    You must ONLY use the information provided below.
+    Do NOT make up facts that are not supported by the data.
+    If the information is insufficient, clearly say so.
 
-Community posts:
-{combined_text}
+    Fishing reports:
+    {combined_text}
 
-Question: {query}
+    User question:
+    {query}
 
-Summarize only what can be inferred from these posts.
-If the posts do not contain enough information, say so clearly.
-Use this structure:
-- Key insights
-- Locations
-- Methods / bait
-- Limitations of available data
-"""
+    Provide a structured answer with:
+    - Key insights
+    - Common fishing methods or bait
+    - Locations mentioned
+    - Practical tips
+    - Limitations of the available data
+
+    Keep the answer clear, concise, and useful for beginners.
+    """
 
     response = call_llm(prompt)
 
@@ -728,11 +732,11 @@ def ask_group_ai(group_id):
     group_posts = Post.query.filter_by(
         visibility="group",
         group_id=group_id
-    ).all()
+    ).order_by(Post.created_at.desc()).limit(15).all()
 
     group_messages = GroupMessage.query.filter_by(
         group_id=group_id
-    ).all()
+    ).order_by(GroupMessage.created_at.desc()).limit(20).all()
 
     matched_posts = [
         p for p in group_posts
@@ -770,26 +774,28 @@ def ask_group_ai(group_id):
     combined_text = "\n\n".join([post_text, message_text]).strip()
 
     prompt = f"""
-You are a fishing assistant for a specific fishing group.
+    You are a fishing assistant for a specific fishing group.
 
-You must ONLY use the group content below.
-Do not make up information that is not supported by the content.
-If the content is insufficient, say so clearly.
+    You must ONLY use the group content below.
+    Do not make up information that is not supported by the content.
+    If the content is insufficient, say so clearly.
 
-Group name: {group.name}
+    Group name: {group.name}
 
-Group content:
-{combined_text}
+    Group content:
+    {combined_text}
 
-Question: {query}
+    Question: {query}
 
-Provide a structured answer with:
-- Key insights
-- Common methods or bait
-- Locations mentioned
-- What this group seems to recommend
-- Limitations of available data
-"""
+    Provide a structured answer with:
+    - Main discussion themes
+    - Common methods or bait
+    - Locations mentioned
+    - What this group seems to recommend
+    - Limitations of available data
+
+    If the question asks for recent activity, focus on the most recent posts and messages.
+    """
 
     response = call_llm(prompt)
 
