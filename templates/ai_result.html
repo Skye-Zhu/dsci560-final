@@ -14,7 +14,7 @@
             <p>The AI assistant needs user-generated fishing reports from the platform to produce evidence-based summaries.</p>
         </div>
     {% else %}
-        <p>Here is the AI-generated summary based on related fishing posts.</p>
+        <p>Here is the AI-generated summary based on related public posts and comments.</p>
 
         <div class="ai-result-card">
             <pre class="ai-result-text">{{ result }}</pre>
@@ -34,6 +34,17 @@
                             By {{ post.author.username }}
                             | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
                         </small>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if matched_comments %}
+            <div class="section">
+                <h2>Matched Comments</h2>
+                {% for comment in matched_comments %}
+                    <div class="card">
+                        <p><strong>{{ comment.author.username }}</strong>: {{ comment.content }}</p>
+                        <small>On post: {{ comment.post.title }}</small>
                     </div>
                 {% endfor %}
             </div>

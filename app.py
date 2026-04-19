@@ -12,6 +12,7 @@ import requests
 from flask import jsonify
 import random
 import string
+import re
 
 
 
@@ -97,6 +98,132 @@ def seed_groups():
 
     db.session.add_all(demo_groups)
     db.session.commit()
+
+def normalize_term(term):
+    term = term.lower()
+    simple_map = {
+        "caught": "catch",
+        "catching": "catch",
+        "fishes": "fish",
+        "fishing": "fish"
+    }
+    return simple_map.get(term, term)
+
+def extract_search_terms(query):
+    stop_words = {
+        "how", "what", "where", "when", "why", "is", "are", "to", "the", "a", "an",
+        "do", "does", "did", "i", "you", "we", "they", "can", "could", "should",
+        "would", "about", "for", "of", "in", "on", "at", "with", "tell", "me"
+    }
+
+    words = re.findall(r"\w+", query.lower())
+    terms = [normalize_term(w) for w in words if w not in stop_words and len(w) > 2]
+    return terms
+
+def score_post(post, terms):
+    score = 0
+    title = (post.title or "").lower()
+    content = (post.content or "").lower()
+    location = (post.location or "").lower()
+
+    for term in terms:
+        if term in title:
+            score += 3
+        if term in content:
+            score += 2
+        if term in location:
+            score += 2
+
+    return score
+
+def retrieve_relevant_public_posts(query, top_k=10):
+    terms = extract_search_terms(query)
+
+    posts = Post.query.filter_by(
+        visibility="public",
+        group_id=None
+    ).all()
+
+    scored = []
+    for post in posts:
+        score = score_post(post, terms)
+        if score > 0:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [post for score, post in scored[:top_k]]
+
+def score_comment(comment, terms):
+    score = 0
+    content = (comment.content or "").lower()
+
+    for term in terms:
+        if term in content:
+            score += 2
+
+    return score
+
+def retrieve_relevant_public_comments(query, top_k=15):
+    terms = extract_search_terms(query)
+
+    comments = Comment.query.join(Post).filter(
+        Post.visibility == "public",
+        Post.group_id.is_(None)
+    ).all()
+
+    scored = []
+    for comment in comments:
+        score = score_comment(comment, terms)
+        if score > 0:
+            scored.append((score, comment))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [comment for score, comment in scored[:top_k]]
+
+def retrieve_relevant_group_posts(group_id, query, top_k=5):
+    terms = extract_search_terms(query)
+
+    posts = Post.query.filter_by(
+        group_id=group_id,
+        visibility="group"
+    ).all()
+
+    scored = []
+    for post in posts:
+        score = score_post(post, terms)
+        if score > 0:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [post for score, post in scored[:top_k]]
+
+
+def score_message(message, terms):
+    score = 0
+    content = (message.content or "").lower()
+
+    for term in terms:
+        if term in content:
+            score += 2
+
+    return score
+
+
+def retrieve_relevant_group_messages(group_id, query, top_k=10):
+    terms = extract_search_terms(query)
+
+    messages = GroupMessage.query.filter_by(
+        group_id=group_id
+    ).all()
+
+    scored = []
+    for m in messages:
+        score = score_message(m, terms)
+        if score > 0:
+            scored.append((score, m))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for score, m in scored[:top_k]]
 
 def call_llm(prompt):
     url = "http://localhost:11434/api/generate"
@@ -861,55 +988,57 @@ def ask_ai():
         return redirect(url_for("login"))
 
     query = request.form.get("query", "").strip()
-
     if not query:
         flash("Please enter a question.", "error")
         return redirect(url_for("home"))
 
-    posts = Post.query.filter(
-        Post.visibility == "public",
-        or_(
-            Post.title.ilike(f"%{query}%"),
-            Post.content.ilike(f"%{query}%"),
-            Post.location.ilike(f"%{query}%")
-        )
-    ).all()
+    matched_posts = retrieve_relevant_public_posts(query, top_k=10)
+    matched_comments = retrieve_relevant_public_comments(query, top_k=15)
 
-    if not posts:
+    if not matched_posts and not matched_comments:
         return render_template(
             "ai_result.html",
             result=None,
             query=query,
             matched_posts=[],
+            matched_comments=[],
             no_data=True
         )
 
-    combined_text = "\n\n".join(
-        [f"Title: {p.title}\nContent: {p.content}\nLocation: {p.location or 'N/A'}" for p in posts[:10]]
-    )
+    post_text = "\n\n".join([
+        f"[Public Post]\nTitle: {p.title}\nContent: {p.content}\nLocation: {p.location or 'N/A'}\nAuthor: {p.author.username}"
+        for p in matched_posts
+    ])
+
+    comment_text = "\n\n".join([
+        f"[Public Comment]\nAuthor: {c.author.username}\nPost Title: {c.post.title}\nContent: {c.content}"
+        for c in matched_comments
+    ])
+
+    combined_text = "\n\n".join([post_text, comment_text]).strip()
 
     prompt = f"""
-    You are an AI assistant for a fishing knowledge platform.
+You are an AI assistant for a fishing knowledge platform.
 
-    You must ONLY use the information provided below.
-    Do NOT make up facts that are not supported by the data.
-    If the information is insufficient, clearly say so.
+You must ONLY use the information provided below.
+Do NOT make up facts that are not supported by the data.
+If the information is insufficient, clearly say so.
 
-    Fishing reports:
-    {combined_text}
+User question:
+{query}
 
-    User question:
-    {query}
+Relevant public fishing content:
+{combined_text}
 
-    Provide a structured answer with:
-    - Key insights
-    - Common fishing methods or bait
-    - Locations mentioned
-    - Practical tips
-    - Limitations of the available data
+Provide a structured answer with:
+- Key insights
+- Common fishing methods or bait
+- Locations mentioned
+- Practical tips
+- Limitations of the available data
 
-    Keep the answer clear, concise, and useful for beginners.
-    """
+Keep the answer clear, concise, and useful for beginners.
+"""
 
     response = call_llm(prompt)
 
@@ -917,7 +1046,8 @@ def ask_ai():
         "ai_result.html",
         result=response,
         query=query,
-        matched_posts=posts[:10],
+        matched_posts=matched_posts,
+        matched_comments=matched_comments,
         no_data=False
     )
 
@@ -928,8 +1058,8 @@ def ask_group_ai(group_id):
     if not current_user:
         session.clear()
         return redirect(url_for("login"))
-    group = db.session.get(Group, group_id)
 
+    group = db.session.get(Group, group_id)
     if not group:
         flash("Group not found.", "error")
         return redirect(url_for("group_list"))
@@ -944,31 +1074,12 @@ def ask_group_ai(group_id):
         return redirect(url_for("group_detail", group_id=group_id))
 
     query = request.form.get("query", "").strip()
-
     if not query:
         flash("Please enter a question.", "error")
         return redirect(url_for("group_detail", group_id=group_id))
 
-    group_posts = Post.query.filter_by(
-        visibility="group",
-        group_id=group_id
-    ).order_by(Post.created_at.desc()).limit(15).all()
-
-    group_messages = GroupMessage.query.filter_by(
-        group_id=group_id
-    ).order_by(GroupMessage.created_at.desc()).limit(20).all()
-
-    matched_posts = [
-        p for p in group_posts
-        if query.lower() in (p.title or "").lower()
-        or query.lower() in (p.content or "").lower()
-        or (p.location and query.lower() in p.location.lower())
-    ]
-
-    matched_messages = [
-        m for m in group_messages
-        if query.lower() in (m.content or "").lower()
-    ]
+    matched_posts = retrieve_relevant_group_posts(group_id, query, top_k=10)
+    matched_messages = retrieve_relevant_group_messages(group_id, query, top_k=15)
 
     if not matched_posts and not matched_messages:
         return render_template(
@@ -983,39 +1094,40 @@ def ask_group_ai(group_id):
 
     post_text = "\n\n".join([
         f"[Group Post]\nTitle: {p.title}\nContent: {p.content}\nLocation: {p.location or 'N/A'}"
-        for p in matched_posts[:10]
+        for p in matched_posts
     ])
 
     message_text = "\n\n".join([
         f"[Group Message]\nAuthor: {m.author.username}\nContent: {m.content}"
-        for m in matched_messages[:15]
+        for m in matched_messages
     ])
 
     combined_text = "\n\n".join([post_text, message_text]).strip()
 
     prompt = f"""
-    You are a fishing assistant for a specific fishing group.
+You are a fishing assistant for a specific fishing group.
 
-    You must ONLY use the group content below.
-    Do not make up information that is not supported by the content.
-    If the content is insufficient, say so clearly.
+You must ONLY use the group content below.
+Do not make up information that is not supported by the content.
+If the content is insufficient, say so clearly.
 
-    Group name: {group.name}
+Group name: {group.name}
 
-    Group content:
-    {combined_text}
+User question:
+{query}
 
-    Question: {query}
+Relevant group content:
+{combined_text}
 
-    Provide a structured answer with:
-    - Main discussion themes
-    - Common methods or bait
-    - Locations mentioned
-    - What this group seems to recommend
-    - Limitations of available data
+Provide a structured answer with:
+- Main discussion themes
+- Common methods or bait
+- Locations mentioned
+- What this group seems to recommend
+- Limitations of available data
 
-    If the question asks for recent activity, focus on the most recent posts and messages.
-    """
+If the question asks for recent activity, focus more on recent content.
+"""
 
     response = call_llm(prompt)
 
@@ -1024,8 +1136,8 @@ def ask_group_ai(group_id):
         group=group,
         query=query,
         result=response,
-        matched_posts=matched_posts[:10],
-        matched_messages=matched_messages[:15],
+        matched_posts=matched_posts,
+        matched_messages=matched_messages,
         no_data=False
     )
 
