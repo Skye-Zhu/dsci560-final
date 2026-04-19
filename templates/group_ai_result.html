@@ -13,8 +13,11 @@
         </div>
     {% else %}
         <p>
-            Based on {{ matched_posts|length }} matched group post{% if matched_posts|length != 1 %}s{% endif %}
-            and {{ matched_messages|length }} matched group message{% if matched_messages|length != 1 %}s{% endif %}.
+            Here is the AI-generated summary based on related group posts and messages.
+        </p>
+        <p>
+            Retrieved {{ matched_posts|length }} post{% if matched_posts|length != 1 %}s{% endif %}
+            and {{ matched_messages|length }} message{% if matched_messages|length != 1 %}s{% endif %} from this group.
         </p>
 
         <div class="ai-result-card">
