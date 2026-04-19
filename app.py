@@ -4,13 +4,14 @@ import os
 from werkzeug.utils import secure_filename
 from models import (
     db, User, Post, Comment, PostLike, CommentLike,
-    Group, Membership, GroupMessage
+    Group, Membership, GroupMessage, GroupJoinRequest
 )
 from sqlalchemy import or_
 from sqlalchemy import or_
 import requests
 from flask import jsonify
-
+import random
+import string
 
 
 
@@ -61,31 +62,36 @@ def seed_groups():
             name="San Diego Charters",
             description="Discussions about charter fishing trips in San Diego",
             group_type="public_open",
-            creator=demo_user
+            creator=demo_user,
+            invite_code=None
         ),
         Group(
             name="LA Shore Fishing",
             description="Local shore fishing reports and tips in Los Angeles",
             group_type="public_open",
-            creator=demo_user
+            creator=demo_user,
+            invite_code=None
         ),
         Group(
             name="Tackle Tips",
             description="Talk about rods, reels, bait, and tackle setups",
             group_type="public_open",
-            creator=demo_user
+            creator=demo_user,
+            invite_code=None
         ),
         Group(
             name="Yellowtail Reports",
             description="Share yellowtail catches, methods, and trip reports",
             group_type="public_open",
-            creator=demo_user
+            creator=demo_user,
+            invite_code=None
         ),
         Group(
             name="Beginner Questions",
             description="A place for new anglers to ask beginner-friendly questions",
             group_type="public_open",
-            creator=demo_user
+            creator=demo_user,
+            invite_code=None
         ),
     ]
 
@@ -113,9 +119,18 @@ def redirect_back_to_home():
 
     return redirect(url_for("home", view=view, group_id=group_id, q=keyword))
 
+def generate_invite_code(length=8):
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+        existing_group = Group.query.filter_by(invite_code=code).first()
+        if not existing_group:
+            return code
+
 @app.route("/")
 def index():
-    if not is_logged_in():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
     return redirect(url_for("home"))
 
@@ -185,10 +200,10 @@ def logout():
 
 @app.route("/home")
 def home():
-    if not is_logged_in():
-        return redirect(url_for("login"))
-
     current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
     keyword = request.args.get("q", "").strip()
     view = request.args.get("view", "all").strip()
     group_filter = request.args.get("group_id", "").strip()
@@ -495,18 +510,20 @@ def toggle_comment_like(comment_id):
 
 @app.route("/groups")
 def group_list():
-    if not is_logged_in():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
 
-    current_user = get_current_user()
     keyword = request.args.get("q", "").strip()
 
-    # 我加入的所有群，包括 private
     memberships = Membership.query.filter_by(user_id=current_user.id).all()
     my_group_ids = [m.group_id for m in memberships]
     my_groups = Group.query.filter(Group.id.in_(my_group_ids)).all() if my_group_ids else []
 
-    # 可公开发现的群，不包括 private
+    requests = GroupJoinRequest.query.filter_by(user_id=current_user.id).all()
+    pending_request_ids = [r.group_id for r in requests if r.status == "pending"]
+
     discover_query = Group.query.filter(Group.group_type != "private_approval")
 
     if keyword:
@@ -519,54 +536,90 @@ def group_list():
 
     discover_groups = discover_query.order_by(Group.name.asc()).all()
 
+    if keyword:
+        private_code_group = Group.query.filter_by(
+            group_type="private_approval",
+            invite_code=keyword
+        ).first()
+
+        if private_code_group and all(g.id != private_code_group.id for g in discover_groups):
+            discover_groups.append(private_code_group)
+
     return render_template(
         "groups.html",
         current_user=current_user,
         my_groups=my_groups,
         discover_groups=discover_groups,
         my_group_ids=my_group_ids,
+        pending_request_ids=pending_request_ids,
         keyword=keyword
     )
 
 
-@app.route("/join_group/<int:group_id>", methods=["POST"])
+@app.route("/groups/<int:group_id>/join", methods=["POST"])
 def join_group(group_id):
-    if not is_logged_in():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
 
-    current_user = get_current_user()
-    group = db.session.get(Group, group_id)
-
-    if not group:
-        flash("Group not found.", "error")
-        return redirect(url_for("group_list"))
+    group = Group.query.get_or_404(group_id)
 
     existing_membership = Membership.query.filter_by(
         user_id=current_user.id,
-        group_id=group_id
+        group_id=group.id
     ).first()
 
     if existing_membership:
-        flash("You are already in this group.", "error")
-        return redirect(url_for("group_detail", group_id=group_id))
+        flash("You are already a member of this group.", "info")
+        return redirect(url_for("group_list"))
 
-    new_membership = Membership(
+    existing_request = GroupJoinRequest.query.filter_by(
         user_id=current_user.id,
-        group_id=group_id
-    )
+        group_id=group.id
+    ).first()
 
-    db.session.add(new_membership)
-    db.session.commit()
+    note = request.form.get("note", "").strip()
 
-    flash("Joined group successfully!", "success")
-    return redirect(url_for("group_detail", group_id=group_id))
+    if group.group_type == "public_open":
+        membership = Membership(user_id=current_user.id, group_id=group.id)
+        db.session.add(membership)
+        db.session.commit()
+        flash("You joined the group successfully.", "success")
+
+    elif group.group_type in ["public_approval", "private_approval"]:
+        if existing_request:
+            if existing_request.status == "pending":
+                flash("Your join request is already pending.", "info")
+            elif existing_request.status == "approved":
+                flash("Your request has already been approved.", "info")
+            elif existing_request.status == "rejected":
+                existing_request.status = "pending"
+                existing_request.note = note if note else None
+                db.session.commit()
+                flash("Your join request has been resubmitted.", "success")
+        else:
+            join_request = GroupJoinRequest(
+                user_id=current_user.id,
+                group_id=group.id,
+                status="pending",
+                note=note if note else None
+            )
+            db.session.add(join_request)
+            db.session.commit()
+            flash("Join request submitted. Waiting for approval.", "success")
+
+    else:
+        flash("Invalid group type.", "danger")
+
+    return redirect(url_for("group_detail", group_id=group.id))
 
 @app.route("/create_group", methods=["GET", "POST"])
 def create_group():
-    if not is_logged_in():
-        return redirect(url_for("login"))
-
     current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -582,11 +635,16 @@ def create_group():
             flash("A group with this name already exists.", "error")
             return redirect(url_for("create_group"))
 
+        invite_code = None
+        if group_type == "private_approval":
+            invite_code = generate_invite_code()
+
         new_group = Group(
             name=name,
             description=description if description else None,
             group_type=group_type,
-            creator_id=current_user.id
+            creator_id=current_user.id,
+            invite_code=invite_code
         )
 
         db.session.add(new_group)
@@ -600,7 +658,10 @@ def create_group():
         db.session.add(new_membership)
         db.session.commit()
 
-        flash("Group created successfully!", "success")
+        if group_type == "private_approval":
+            flash(f"Private group created! Invite code: {invite_code}", "success")
+        else:
+            flash("Group created successfully!", "success")
         return redirect(url_for("group_detail", group_id=new_group.id))
 
     return render_template("create_group.html", current_user=current_user)
@@ -608,45 +669,121 @@ def create_group():
 
 @app.route("/groups/<int:group_id>")
 def group_detail(group_id):
-    if not is_logged_in():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
 
-    current_user = get_current_user()
-    group = db.session.get(Group, group_id)
+    group = Group.query.get_or_404(group_id)
 
-    if not group:
-        flash("Group not found.", "error")
-        return redirect(url_for("group_list"))
-
-    is_member = Membership.query.filter_by(
+    # 这里判断你是不是 member（你刚刚问的第一段）
+    membership = Membership.query.filter_by(
         user_id=current_user.id,
-        group_id=group_id
-    ).first() is not None
+        group_id=group.id
+    ).first()
 
+    is_member = membership is not None
+
+    # 判断是不是 creator
+    is_creator = (group.creator_id == current_user.id)
+
+    #  如果是 creator，就查 pending requests
+    pending_requests = []
+    if is_creator:
+        pending_requests = GroupJoinRequest.query.filter_by(
+            group_id=group.id,
+            status="pending"
+        ).all()
+
+    # 你之前页面用的 posts / messages 也要一起传
     group_posts = Post.query.filter_by(
-        visibility="group",
-        group_id=group_id
+        group_id=group.id,
+        visibility="group"
     ).order_by(Post.created_at.desc()).all()
 
     messages = GroupMessage.query.filter_by(
-        group_id=group_id
+        group_id=group.id
     ).order_by(GroupMessage.created_at.asc()).all()
 
+    #  关键：把这些变量传给 HTML（你刚刚问的第二段就在这里）
     return render_template(
         "group_detail.html",
-        current_user=current_user,
         group=group,
+        current_user=current_user,
         is_member=is_member,
+        is_creator=is_creator,
+        pending_requests=pending_requests,
         group_posts=group_posts,
         messages=messages
     )
 
-@app.route("/send_group_message/<int:group_id>", methods=["POST"])
-def send_group_message(group_id):
-    if not is_logged_in():
+
+@app.route("/join_requests/<int:request_id>/approve", methods=["POST"])
+def approve_join_request(request_id):
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
 
+    join_request = GroupJoinRequest.query.get_or_404(request_id)
+    group = Group.query.get_or_404(join_request.group_id)
+
+    if group.creator_id != current_user.id:
+        flash("You are not allowed to approve requests for this group.", "danger")
+        return redirect(url_for("group_list"))
+
+    if join_request.status != "pending":
+        flash("This request is no longer pending.", "info")
+        return redirect(url_for("group_detail", group_id=group.id))
+
+    existing_membership = Membership.query.filter_by(
+        user_id=join_request.user_id,
+        group_id=group.id
+    ).first()
+
+    if not existing_membership:
+        membership = Membership(
+            user_id=join_request.user_id,
+            group_id=group.id
+        )
+        db.session.add(membership)
+
+    join_request.status = "approved"
+    db.session.commit()
+
+    flash("Join request approved.", "success")
+    return redirect(url_for("group_detail", group_id=group.id))
+
+@app.route("/join_requests/<int:request_id>/reject", methods=["POST"])
+def reject_join_request(request_id):
     current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    join_request = GroupJoinRequest.query.get_or_404(request_id)
+    group = Group.query.get_or_404(join_request.group_id)
+
+    if group.creator_id != current_user.id:
+        flash("You are not allowed to reject requests for this group.", "danger")
+        return redirect(url_for("group_list"))
+
+    if join_request.status != "pending":
+        flash("This request is no longer pending.", "info")
+        return redirect(url_for("group_detail", group_id=group.id))
+
+    join_request.status = "rejected"
+    db.session.commit()
+
+    flash("Join request rejected.", "success")
+    return redirect(url_for("group_detail", group_id=group.id))
+
+@app.route("/send_group_message/<int:group_id>", methods=["POST"])
+def send_group_message(group_id):
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
     group = db.session.get(Group, group_id)
 
     if not group:
@@ -718,7 +855,9 @@ def ask_ai():
 #ai
 @app.route("/ask_ai", methods=["POST"])
 def ask_ai():
-    if not is_logged_in():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
         return redirect(url_for("login"))
 
     query = request.form.get("query", "").strip()
@@ -785,10 +924,10 @@ def ask_ai():
 
 @app.route("/ask_group_ai/<int:group_id>", methods=["POST"])
 def ask_group_ai(group_id):
-    if not is_logged_in():
-        return redirect(url_for("login"))
-
     current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
     group = db.session.get(Group, group_id)
 
     if not group:

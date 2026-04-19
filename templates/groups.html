@@ -21,6 +21,10 @@
                         {% endif %}
                     </p>
 
+                    {% if group.group_type == "private_approval" and group.invite_code %}
+                        <p class="location-text">Invite Code: {{ group.invite_code }}</p>
+                    {% endif %}
+
                     <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">Enter Group</a>
                 </div>
             {% endfor %}
@@ -55,28 +59,38 @@
                             Public Open
                         {% elif group.group_type == "public_approval" %}
                             Public Approval
+                        {% elif group.group_type == "private_approval" %}
+                            Private Approval
                         {% endif %}
                     </p>
+
+                    {% if group.group_type == "private_approval" %}
+                        <p class="location-text">Private group — request access from the detail page.</p>
+                    {% endif %}
 
                     {% if group.id in my_group_ids %}
                         <span class="member-badge">Joined</span>
                         <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">Enter</a>
+
+                    {% elif group.id in pending_request_ids %}
+                        <span class="member-badge">Pending Approval</span>
+                        <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">View Request</a>
+
                     {% else %}
-                        <form method="POST" action="{{ url_for('join_group', group_id=group.id) }}">
-                            <button type="submit">
-                                {% if group.group_type == "public_open" %}
-                                    Join Group
-                                {% elif group.group_type == "public_approval" %}
-                                    Request to Join
-                                {% endif %}
-                            </button>
-                        </form>
+                        {% if group.group_type == "public_open" %}
+                            <form method="POST" action="{{ url_for('join_group', group_id=group.id) }}">
+                                <button type="submit">Join Group</button>
+                            </form>
+                        {% else %}
+                            <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">View</a>
+                        {% endif %}
                     {% endif %}
                 </div>
             {% endfor %}
         </div>
     {% else %}
-        <p>No public groups found.</p>
+        <p>No groups found.</p>
     {% endif %}
 </div>
+
 {% endblock %}

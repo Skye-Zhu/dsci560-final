@@ -21,6 +21,7 @@ class Group(db.Model):
 
     group_type = db.Column(db.String(30), nullable=False, default="public_open")
     creator_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    invite_code = db.Column(db.String(20), unique=True, nullable=True)
 
     creator = db.relationship("User", backref=db.backref("created_groups", lazy=True))
 
@@ -116,3 +117,24 @@ class GroupMessage(db.Model):
 
     group = db.relationship("Group", backref=db.backref("group_messages", lazy=True, cascade="all, delete-orphan"))
     author = db.relationship("User", backref=db.backref("group_messages", lazy=True))
+
+
+class GroupJoinRequest(db.Model):
+    __tablename__ = "group_join_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+
+    status = db.Column(db.String(20), default="pending")
+    note = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("join_requests", lazy=True))
+    group = db.relationship("Group", backref=db.backref("join_requests", lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "group_id", name="unique_join_request"),
+    )
