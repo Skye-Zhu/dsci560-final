@@ -48,12 +48,45 @@ def seed_groups():
     if Group.query.first():
         return
 
+    demo_user = User.query.filter_by(username="demo_creator").first()
+
+    if not demo_user:
+        demo_user = User(username="demo_creator", password="123456")
+        db.session.add(demo_user)
+        db.session.commit()
+        db.session.refresh(demo_user)
+
     demo_groups = [
-        Group(name="San Diego Charters", description="Discussions about charter fishing trips in San Diego"),
-        Group(name="LA Shore Fishing", description="Local shore fishing reports and tips in Los Angeles"),
-        Group(name="Tackle Tips", description="Talk about rods, reels, bait, and tackle setups"),
-        Group(name="Yellowtail Reports", description="Share yellowtail catches, methods, and trip reports"),
-        Group(name="Beginner Questions", description="A place for new anglers to ask beginner-friendly questions"),
+        Group(
+            name="San Diego Charters",
+            description="Discussions about charter fishing trips in San Diego",
+            group_type="public_open",
+            creator=demo_user
+        ),
+        Group(
+            name="LA Shore Fishing",
+            description="Local shore fishing reports and tips in Los Angeles",
+            group_type="public_open",
+            creator=demo_user
+        ),
+        Group(
+            name="Tackle Tips",
+            description="Talk about rods, reels, bait, and tackle setups",
+            group_type="public_open",
+            creator=demo_user
+        ),
+        Group(
+            name="Yellowtail Reports",
+            description="Share yellowtail catches, methods, and trip reports",
+            group_type="public_open",
+            creator=demo_user
+        ),
+        Group(
+            name="Beginner Questions",
+            description="A place for new anglers to ask beginner-friendly questions",
+            group_type="public_open",
+            creator=demo_user
+        ),
     ]
 
     db.session.add_all(demo_groups)
@@ -468,26 +501,30 @@ def group_list():
     current_user = get_current_user()
     keyword = request.args.get("q", "").strip()
 
-    query = Group.query
+    # 我加入的所有群，包括 private
+    memberships = Membership.query.filter_by(user_id=current_user.id).all()
+    my_group_ids = [m.group_id for m in memberships]
+    my_groups = Group.query.filter(Group.id.in_(my_group_ids)).all() if my_group_ids else []
+
+    # 可公开发现的群，不包括 private
+    discover_query = Group.query.filter(Group.group_type != "private_approval")
 
     if keyword:
-        query = query.filter(
+        discover_query = discover_query.filter(
             or_(
                 Group.name.ilike(f"%{keyword}%"),
                 Group.description.ilike(f"%{keyword}%")
             )
         )
 
-    groups = query.order_by(Group.name.asc()).all()
-
-    memberships = Membership.query.filter_by(user_id=current_user.id).all()
-    user_group_ids = [m.group_id for m in memberships]
+    discover_groups = discover_query.order_by(Group.name.asc()).all()
 
     return render_template(
         "groups.html",
         current_user=current_user,
-        groups=groups,
-        user_group_ids=user_group_ids,
+        my_groups=my_groups,
+        discover_groups=discover_groups,
+        my_group_ids=my_group_ids,
         keyword=keyword
     )
 
@@ -523,6 +560,50 @@ def join_group(group_id):
 
     flash("Joined group successfully!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
+
+@app.route("/create_group", methods=["GET", "POST"])
+def create_group():
+    if not is_logged_in():
+        return redirect(url_for("login"))
+
+    current_user = get_current_user()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        group_type = request.form.get("group_type", "public_open").strip()
+
+        if not name:
+            flash("Group name is required.", "error")
+            return redirect(url_for("create_group"))
+
+        existing_group = Group.query.filter_by(name=name).first()
+        if existing_group:
+            flash("A group with this name already exists.", "error")
+            return redirect(url_for("create_group"))
+
+        new_group = Group(
+            name=name,
+            description=description if description else None,
+            group_type=group_type,
+            creator_id=current_user.id
+        )
+
+        db.session.add(new_group)
+        db.session.commit()
+
+        # 创建后自动加入 group
+        new_membership = Membership(
+            user_id=current_user.id,
+            group_id=new_group.id
+        )
+        db.session.add(new_membership)
+        db.session.commit()
+
+        flash("Group created successfully!", "success")
+        return redirect(url_for("group_detail", group_id=new_group.id))
+
+    return render_template("create_group.html", current_user=current_user)
 
 
 @app.route("/groups/<int:group_id>")

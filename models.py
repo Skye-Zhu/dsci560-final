@@ -19,6 +19,11 @@ class Group(db.Model):
     name = db.Column(db.String(120), nullable=False, unique=True)
     description = db.Column(db.String(255), nullable=True)
 
+    group_type = db.Column(db.String(30), nullable=False, default="public_open")
+    creator_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    creator = db.relationship("User", backref=db.backref("created_groups", lazy=True))
+
 
 class Membership(db.Model):
     __tablename__ = "memberships"

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="section">
+    <h1>Create a Group</h1>
+    <p>Create your own fishing community and choose how people can join.</p>
+
+    <form method="POST" action="{{ url_for('create_group') }}" class="form">
+        <label>Group Name</label>
+        <input type="text" name="name" placeholder="Enter group name">
+
+        <label>Description</label>
+        <textarea name="description" rows="4" placeholder="Describe the purpose of this group..."></textarea>
+
+        <label>Group Type</label>
+        <select name="group_type">
+            <option value="public_open">Public Open — searchable and anyone can join</option>
+            <option value="public_approval">Public Approval — searchable but requires approval</option>
+            <option value="private_approval">Private Approval — hidden from public search and requires approval</option>
+        </select>
+
+        <button type="submit">Create Group</button>
+    </form>
+</div>
+{% endblock %}
