@@ -341,6 +341,57 @@ def add_post_to_group_index(post):
     }
     save_metadata(meta, meta_path)
 
+def add_comment_to_public_index(comment):
+    if not comment.post:
+        return
+    if comment.post.visibility != "public" or comment.post.group_id is not None:
+        return
+
+    index = load_index(PUBLIC_COMMENT_INDEX_PATH)
+    if index is None:
+        index = create_faiss_index()
+
+    text = build_comment_text(comment)
+    emb = encode_texts([text])
+    ids = np.array([comment.id], dtype="int64")
+
+    index.remove_ids(ids)
+    index.add_with_ids(emb, ids)
+    save_index(index, PUBLIC_COMMENT_INDEX_PATH)
+
+    meta = load_metadata(PUBLIC_COMMENT_META_PATH)
+    meta[str(comment.id)] = {
+        "post_id": comment.post_id,
+        "author_id": comment.author_id
+    }
+    save_metadata(meta, PUBLIC_COMMENT_META_PATH)
+
+def add_group_message_to_index(message):
+    if not message.group_id:
+        return
+
+    index_path = get_group_message_index_path(message.group_id)
+    meta_path = get_group_message_meta_path(message.group_id)
+
+    index = load_index(index_path)
+    if index is None:
+        index = create_faiss_index()
+
+    text = build_group_message_text(message)
+    emb = encode_texts([text])
+    ids = np.array([message.id], dtype="int64")
+
+    index.remove_ids(ids)
+    index.add_with_ids(emb, ids)
+    save_index(index, index_path)
+
+    meta = load_metadata(meta_path)
+    meta[str(message.id)] = {
+        "group_id": message.group_id,
+        "author_id": message.author_id
+    }
+    save_metadata(meta, meta_path)
+
 #delete index
 def remove_post_from_public_index(post_id):
     index = load_index(PUBLIC_INDEX_PATH)
@@ -366,6 +417,31 @@ def remove_post_from_group_index(group_id, post_id):
 
     meta = load_metadata(meta_path)
     meta.pop(str(post_id), None)
+    save_metadata(meta, meta_path)
+
+def remove_comment_from_public_index(comment_id):
+    index = load_index(PUBLIC_COMMENT_INDEX_PATH)
+    if index is not None:
+        ids = np.array([comment_id], dtype="int64")
+        index.remove_ids(ids)
+        save_index(index, PUBLIC_COMMENT_INDEX_PATH)
+
+    meta = load_metadata(PUBLIC_COMMENT_META_PATH)
+    meta.pop(str(comment_id), None)
+    save_metadata(meta, PUBLIC_COMMENT_META_PATH)
+
+def remove_group_message_from_index(group_id, message_id):
+    index_path = get_group_message_index_path(group_id)
+    meta_path = get_group_message_meta_path(group_id)
+
+    index = load_index(index_path)
+    if index is not None:
+        ids = np.array([message_id], dtype="int64")
+        index.remove_ids(ids)
+        save_index(index, index_path)
+
+    meta = load_metadata(meta_path)
+    meta.pop(str(message_id), None)
     save_metadata(meta, meta_path)
 
 #add comment & message to embeddings
@@ -955,7 +1031,7 @@ def add_comment(post_id):
     db.session.add(new_comment)
     db.session.commit()
     if post.visibility == "public" and post.group_id is None:
-        rebuild_public_comment_index()
+        add_comment_to_public_index(new_comment)
 
     return jsonify({
         "success": True,
@@ -982,14 +1058,17 @@ def delete_comment(comment_id):
     if comment.author_id != current_user.id:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
+
+
     post_id = comment.post_id
+    comment_id_to_remove = comment.id
     post = db.session.get(Post, post_id)
 
     db.session.delete(comment)
     db.session.commit()
 
     if post and post.visibility == "public" and post.group_id is None:
-        rebuild_public_comment_index()
+        remove_comment_from_public_index(comment_id_to_remove)
 
     remaining_count = Comment.query.filter_by(post_id=post_id).count()
 
@@ -1383,7 +1462,7 @@ def send_group_message(group_id):
     db.session.add(new_message)
     db.session.commit()
 
-    rebuild_group_message_index(group_id)
+    add_group_message_to_index(new_message)
 
     flash("Message sent!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
