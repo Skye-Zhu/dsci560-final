@@ -2,19 +2,23 @@
 
 {% block content %}
 <div class="section">
-    <h1>AI Insight</h1>
-
-    {% if query %}
-        <p><strong>Question:</strong> {{ query }}</p>
-    {% endif %}
+    <h1>Group AI Insight</h1>
+    <p><strong>Group:</strong> {{ group.name }}</p>
+    <p><strong>Question:</strong> {{ query }}</p>
 
     {% if no_data %}
         <div class="ai-result-card">
-            <p>No related community posts were found for this query yet.</p>
-            <p>The AI assistant needs user-generated fishing reports from the platform to produce evidence-based summaries.</p>
+            <p>No related posts or messages were found in this group for this query.</p>
+            <p>Try asking a broader question or adding more group content.</p>
         </div>
     {% else %}
-        <p>Here is the AI-generated summary based on related public posts and comments.</p>
+        <p>
+            Here is the AI-generated summary based on related group posts and messages.
+        </p>
+        <p>
+            Retrieved {{ matched_posts|length }} post{% if matched_posts|length != 1 %}s{% endif %}
+            and {{ matched_messages|length }} message{% if matched_messages|length != 1 %}s{% endif %} from this group.
+        </p>
 
         <div class="ai-result-card">
             <pre class="ai-result-text">{{ result }}</pre>
@@ -22,7 +26,7 @@
 
         {% if matched_posts %}
             <div class="section">
-                <h2>Matched Community Posts</h2>
+                <h2>Matched Group Posts</h2>
                 {% for post in matched_posts %}
                     <div class="post-card">
                         <h3>{{ post.title }}</h3>
@@ -38,21 +42,16 @@
                 {% endfor %}
             </div>
         {% endif %}
-        {% if matched_comments %}
+
+        {% if matched_messages %}
             <div class="section">
-                <h2>Matched Comments</h2>
-                {% for comment in matched_comments %}
-                    <div class="card">
-                        <p><strong>{{ comment.author.username }}</strong>: {{ comment.content }}</p>
+                <h2>Matched Group Messages</h2>
+                {% for message in matched_messages %}
+                    <div class="comment-card">
+                        <p>{{ message.content }}</p>
                         <small>
-                            {% if comment.post %}
-                                Commented on:
-                                <a href="{{ url_for('home') }}#post-{{ comment.post.id }}" class="post-link">
-                                    {{ comment.post.title }}
-                                </a>
-                            {% else %}
-                                Original post unavailable
-                            {% endif %}
+                            {{ message.author.username }}
+                            | {{ message.created_at.strftime("%Y-%m-%d %H:%M") }}
                         </small>
                     </div>
                 {% endfor %}
@@ -61,7 +60,7 @@
     {% endif %}
 
     <div style="margin-top: 20px;">
-        <a href="{{ url_for('home') }}" class="button-link">Back to Home</a>
+        <a href="{{ url_for('group_detail', group_id=group.id) }}" class="button-link">Back to Group</a>
     </div>
 </div>
 {% endblock %}

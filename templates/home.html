@@ -13,8 +13,8 @@
 </div>
 
 <div class="section">
-    <h2>Create a Public Post</h2>
-    <form method="POST" action="{{ url_for('create_public_post') }}" class="form" enctype="multipart/form-data">
+    <h2>Create a Post</h2>
+    <form id="create-post-form" onsubmit="submitPost(event, this); return false;" class="form" enctype="multipart/form-data">
         <label>Title</label>
         <input type="text" name="title" placeholder="Enter post title">
 
@@ -24,8 +24,23 @@
         <input type="text" name="location" placeholder="e.g., San Diego, Long Beach">
         <label>Upload Image (optional)</label>
         <input type="file" name="image">
+        <label>Post To</label>
+        <select name="visibility" id="visibility-select">
+            <option value="public">Public</option>
+            <option value="group">Group</option>
+        </select>
 
-        <button type="submit">Post Publicly</button>
+        <div id="group-select-wrapper" style="display: none;">
+            <label>Select Group</label>
+            <select name="group_id" id="group-select">
+                <option value="">-- Select a group --</option>
+                {% for group in my_groups %}
+                    <option value="{{ group.id }}">{{ group.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit">Post</button>
     </form>
 </div>
 
@@ -47,7 +62,15 @@
 </div>
 
 <div class="section">
-    <h2>Public Feed</h2>
+    <h2>
+        {% if selected_group %}
+            Posts from {{ selected_group.name }}
+        {% elif view == "my" %}
+            My Posts
+        {% else %}
+            Public Feed
+        {% endif %}
+    </h2>
 
     <div class="feed-filter">
         <a href="{{ url_for('home', view='all', q=keyword) }}"
@@ -60,16 +83,34 @@
             My Posts
         </a>
     </div>
+    <form method="GET" action="{{ url_for('home') }}" class="group-filter-form">
+        <input type="hidden" name="q" value="{{ keyword }}">
+        <label for="group-filter-select">View Group Posts:</label>
+        <select name="group_id" id="group-filter-select" onchange="this.form.submit()">
+            <option value="">-- Select a group --</option>
+            {% for group in my_groups %}
+                <option value="{{ group.id }}" {% if group_filter == group.id|string %}selected{% endif %}>
+                    {{ group.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% if group_filter %}
+        <div style="margin-top: 10px;">
+            <a href="{{ url_for('home', view='all') }}" class="filter-button">Back to Public Feed</a>
+        </div>
+    {% endif %}
     {% if keyword %}
         <p class="search-result-text">
             Showing results for "{{ keyword }}"
-            <a href="{{ url_for('home', view=view) }}">(Clear search)</a>
+            <a href="{{ url_for('home', view=view, group_id=group_filter) }}">(Clear search)</a>
         </p>
     {% endif %}
 
+    <div id="feed-posts">
     {% if posts %}
         {% for post in posts %}
-            <div class="post-card">
+            <div class="post-card" id="post-{{ post.id }}">
                 <h3>{{ post.title }}</h3>
 
                 <p>{{ post.content }}</p>
@@ -86,21 +127,23 @@
                     By {{ post.author.username }}
                     | {{ post.created_at.strftime("%Y-%m-%d %H:%M") }}
                 </small>
-                {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
-                {% set post_comment_count = comments | selectattr("post_id", "equalto", post.id) | list | length %}
-
                 {% set user_liked = likes | selectattr("post_id", "equalto", post.id)
                            | selectattr("user_id", "equalto", current_user.id)
                            | list | length > 0 %}
+                {% set post_like_count = likes | selectattr("post_id", "equalto", post.id) | list | length %}
+                {% set post_comment_count = comments | selectattr("post_id", "equalto", post.id) | list | length %}
 
                 <div class="post-actions">
-                    <form method="POST" action="{{ url_for('toggle_like', post_id=post.id) }}" class="like-form">
-                        <button type="submit" class="like-button {% if user_liked %}liked{% endif %}">
-                            {% if user_liked %}♥{% else %}♡{% endif %}
-                        </button>
-                    </form>
+                    <button
+                        type="button"
+                        class="like-button {% if user_liked %}liked{% endif %}"
+                        data-post-id="{{ post.id }}"
+                        onclick="toggleLike(this)"
+                    >
+                        {% if user_liked %}♥{% else %}♡{% endif %}
+                    </button>
 
-                    <span class="like-count">
+                    <span class="like-count" id="like-count-{{ post.id }}">
                         {{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}
                         ·
                         {{ post_comment_count }} comment{% if post_comment_count != 1 %}s{% endif %}
@@ -108,59 +151,75 @@
                 </div>
 
                 {% if post.author_id == current_user.id %}
-                    <form method="POST" action="{{ url_for('delete_public_post', post_id=post.id) }}" class="delete-form">
-                        <button type="submit" class="delete-button">Delete</button>
-                    </form>
+                    <button
+                        type="button"
+                        class="delete-button"
+                        data-post-id="{{ post.id }}"
+                        onclick="deletePost(this)"
+                    >
+                        Delete
+                    </button>
                 {% endif %}
 
                 <div class="comment-section">
-                    <h4>Comments ({{ post_comment_count }})</h4>
+                    <h4 id="comment-title-{{ post.id }}">Comments ({{ post_comment_count }})</h4>
 
-                    {% set post_comments = comments | selectattr("post_id", "equalto", post.id) | list %}
-                    {% if post_comments %}
-                        {% for comment in post_comments %}
-                            {% set user_liked_comment = comment_likes | selectattr("comment_id", "equalto", comment.id)
-                                                                    | selectattr("user_id", "equalto", current_user.id)
-                                                                    | list | length > 0 %}
-                            {% set comment_like_count = comment_likes | selectattr("comment_id", "equalto", comment.id) | list | length %}
+                    <div id="comment-list-{{ post.id }}">
+                        {% set post_comments = comments | selectattr("post_id", "equalto", post.id) | list %}
+                        {% if post_comments %}
+                            {% for comment in post_comments %}
+                                {% set user_liked_comment = comment_likes | selectattr("comment_id", "equalto", comment.id)
+                                                                        | selectattr("user_id", "equalto", current_user.id)
+                                                                        | list | length > 0 %}
+                                {% set comment_like_count = comment_likes | selectattr("comment_id", "equalto", comment.id) | list | length %}
 
-                            <div class="comment-card">
-                                <p>{{ comment.content }}</p>
+                                <div class="comment-card" id="comment-{{ comment.id }}">
+                                    <p>{{ comment.content }}</p>
 
-                                <small>
-                                    {{ comment.author.username }}
-                                    | {{ comment.created_at.strftime("%Y-%m-%d %H:%M") }}
-                                </small>
+                                    <small>
+                                        {{ comment.author.username }}
+                                        | {{ comment.created_at.strftime("%Y-%m-%d %H:%M") }}
+                                    </small>
 
-                                <div class="comment-actions">
-                                    <form method="POST" action="{{ url_for('toggle_comment_like', comment_id=comment.id) }}" class="comment-like-form">
-                                        <button type="submit" class="comment-like-button {% if user_liked_comment %}liked{% endif %}">
+                                    <div class="comment-actions">
+                                        <button
+                                            type="button"
+                                            class="comment-like-button {% if user_liked_comment %}liked{% endif %}"
+                                            data-comment-id="{{ comment.id }}"
+                                            onclick="toggleCommentLike(this)"
+                                        >
                                             {% if user_liked_comment %}♥{% else %}♡{% endif %}
                                         </button>
-                                    </form>
 
-                                    <span class="comment-like-count">
-                                        {{ comment_like_count }} like{% if comment_like_count != 1 %}s{% endif %}
-                                    </span>
+                                        <span class="comment-like-count" id="comment-like-count-{{ comment.id }}">
+                                            {{ comment_like_count }} like{% if comment_like_count != 1 %}s{% endif %}
+                                        </span>
+                                    </div>
+
+                                    {% if comment.author_id == current_user.id %}
+                                        <button
+                                            type="button"
+                                            class="delete-comment-button"
+                                            data-comment-id="{{ comment.id }}"
+                                            data-post-id="{{ post.id }}"
+                                            onclick="deleteComment(this)"
+                                        >
+                                            Delete Comment
+                                        </button>
+                                    {% endif %}
                                 </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-comment-text" id="no-comment-text-{{ post.id }}">No comments yet.</p>
+                        {% endif %}
+                    </div>
 
-                                {% if comment.author_id == current_user.id %}
-                                    <form method="POST" action="{{ url_for('delete_comment', comment_id=comment.id) }}" class="delete-comment-form">
-                                        <button type="submit" class="delete-comment-button">Delete Comment</button>
-                                    </form>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="no-comment-text">No comments yet.</p>
-                    {% endif %}
-
-                    <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}" class="comment-form">
+                    <form onsubmit="submitComment(event, this); return false;" class="comment-form" data-post-id="{{ post.id }}">
                         <input type="text" name="content" placeholder="Write a comment...">
                         <button type="submit">Comment</button>
                     </form>
                 </div>
-            </div>
+
         {% endfor %}
     {% else %}
         {% if keyword %}
@@ -172,6 +231,400 @@
         {% endif %}
     {% endif %}
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const visibilitySelect = document.getElementById("visibility-select");
+    const groupWrapper = document.getElementById("group-select-wrapper");
+    const groupSelect = document.getElementById("group-select");
+
+    function toggleGroupSelect() {
+        if (visibilitySelect.value === "group") {
+            groupWrapper.style.display = "block";
+        } else {
+            groupWrapper.style.display = "none";
+            groupSelect.value = "";
+        }
+    }
+
+    visibilitySelect.addEventListener("change", toggleGroupSelect);
+
+    toggleGroupSelect();
+});
+</script>
+
+<script>
+async function toggleLike(button) {
+    const postId = button.dataset.postId;
+
+    try {
+        const response = await fetch(`/toggle_like/${postId}`, {
+            method: "POST",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            return;
+        }
+
+        if (data.liked) {
+            button.classList.add("liked");
+            button.textContent = "♥";
+        } else {
+            button.classList.remove("liked");
+            button.textContent = "♡";
+        }
+
+        const countSpan = document.getElementById(`like-count-${postId}`);
+        const commentPart = countSpan.textContent.split("·")[1]?.trim() || "";
+        countSpan.textContent = `${data.like_count} like${data.like_count !== 1 ? "s" : ""} · ${commentPart}`;
+    } catch (error) {
+        console.error("Like toggle failed:", error);
+    }
+}
+</script>
+
+<script>
+async function toggleCommentLike(button) {
+    const commentId = button.dataset.commentId;
+
+    try {
+        const response = await fetch(`/toggle_comment_like/${commentId}`, {
+            method: "POST",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            return;
+        }
+
+        if (data.liked) {
+            button.classList.add("liked");
+            button.textContent = "♥";
+        } else {
+            button.classList.remove("liked");
+            button.textContent = "♡";
+        }
+
+        const countSpan = document.getElementById(`comment-like-count-${commentId}`);
+        countSpan.textContent = `${data.like_count} like${data.like_count !== 1 ? "s" : ""}`;
+    } catch (error) {
+        console.error("Comment like toggle failed:", error);
+    }
+}
+</script>
+
+<script>
+async function submitComment(event, form) {
+    event.preventDefault();
+
+    const postId = form.dataset.postId;
+    const input = form.querySelector('input[name="content"]');
+    const content = input.value.trim();
+
+    if (!content) return;
+
+    try {
+        const formData = new FormData();
+        formData.append("content", content);
+
+        const response = await fetch(`/add_comment/${postId}`, {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!data.success) return;
+
+        const commentList = document.getElementById(`comment-list-${postId}`);
+        const noCommentText = document.getElementById(`no-comment-text-${postId}`);
+
+        if (noCommentText) {
+            noCommentText.remove();
+        }
+
+        const newCommentHtml = `
+            <div class="comment-card" id="comment-${data.comment.id}">
+                <p>${escapeHtml(data.comment.content)}</p>
+                <small>
+                    ${escapeHtml(data.comment.author)}
+                    | ${data.comment.created_at}
+                </small>
+                <div class="comment-actions">
+                    <button
+                        type="button"
+                        class="comment-like-button"
+                        data-comment-id="${data.comment.id}"
+                        onclick="toggleCommentLike(this)"
+                    >
+                        ♡
+                    </button>
+                    <span class="comment-like-count" id="comment-like-count-${data.comment.id}">
+                        0 likes
+                    </span>
+                </div>
+
+                <button
+                    type="button"
+                    class="delete-comment-button"
+                    data-comment-id="${data.comment.id}"
+                    data-post-id="${postId}"
+                    onclick="deleteComment(this)"
+                >
+                    Delete Comment
+                </button>
+            </div>
+        `;
+
+        commentList.insertAdjacentHTML("afterbegin", newCommentHtml);
+
+        const commentTitle = document.getElementById(`comment-title-${postId}`);
+        const match = commentTitle.textContent.match(/\((\d+)\)/);
+        const currentCount = match ? parseInt(match[1]) : 0;
+        commentTitle.textContent = `Comments (${currentCount + 1})`;
+
+        input.value = "";
+    } catch (error) {
+        console.error("Add comment failed:", error);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
+<script>
+async function deleteComment(button) {
+    const commentId = button.dataset.commentId;
+    const postId = button.dataset.postId;
+
+    try {
+        const response = await fetch(`/delete_comment/${commentId}`, {
+            method: "POST"
+        });
+
+        const data = await response.json();
+
+        if (!data.success) return;
+
+        const commentElement = document.getElementById(`comment-${commentId}`);
+        if (commentElement) {
+            commentElement.remove();
+        }
+
+        const commentTitle = document.getElementById(`comment-title-${postId}`);
+        commentTitle.textContent = `Comments (${data.remaining_count})`;
+
+        const likeCountSpan = document.getElementById(`like-count-${postId}`);
+        if (likeCountSpan) {
+            const parts = likeCountSpan.textContent.split("·");
+            const likePart = parts[0].trim();
+            likeCountSpan.textContent = `${likePart} · ${data.remaining_count} comment${data.remaining_count !== 1 ? "s" : ""}`;
+        }
+
+        const commentList = document.getElementById(`comment-list-${postId}`);
+        if (data.remaining_count === 0 && commentList && !document.getElementById(`no-comment-text-${postId}`)) {
+            commentList.insertAdjacentHTML(
+                "afterbegin",
+                `<p class="no-comment-text" id="no-comment-text-${postId}">No comments yet.</p>`
+            );
+        }
+    } catch (error) {
+        console.error("Delete comment failed:", error);
+    }
+}
+</script>
+
+
+<script>
+async function deletePost(button) {
+    const postId = button.dataset.postId;
+
+    try {
+        const response = await fetch(`/delete_public_post/${postId}`, {
+            method: "POST"
+        });
+
+        const data = await response.json();
+
+        if (!data.success) return;
+
+        const postElement = document.getElementById(`post-${postId}`);
+        if (postElement) {
+            postElement.remove();
+        }
+        showToast("Post deleted successfully!");
+
+    } catch (error) {
+        console.error("Delete post failed:", error);
+    }
+}
+</script>
+
+<script>
+function showToast(message, type = "success") {
+    let container = document.querySelector(".toast-container");
+
+    if (!container) {
+        container = document.createElement("div");
+        container.className = "toast-container";
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(-8px)";
+        setTimeout(() => toast.remove(), 400);
+    }, 2200);
+}
+</script>
+
+
+<script>
+async function submitPost(event, form) {
+    event.preventDefault();
+
+    try {
+        const formData = new FormData(form);
+
+        const response = await fetch("/create_public_post", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            showToast(data.error || "Failed to create post", "error");
+            return;
+        }
+
+        const post = data.post;
+        const feedPosts = document.getElementById("feed-posts");
+
+        const currentGroupFilter = "{{ group_filter }}";
+        const currentView = "{{ view }}";
+        const currentUserId = "{{ current_user.id }}";
+
+        let shouldInsert = false;
+
+        if (currentGroupFilter) {
+            shouldInsert =
+                post.visibility === "group" &&
+                String(post.group_id) === String(currentGroupFilter);
+        } else if (currentView === "my") {
+            shouldInsert = String(post.author_id) === String(currentUserId);
+        } else {
+            shouldInsert = post.visibility === "public";
+        }
+
+        if (shouldInsert && feedPosts) {
+            const imageHtml = post.image
+                ? `<img src="/static/uploads/${post.image}" class="post-image">`
+                : "";
+
+            const locationHtml = post.location
+                ? `<p class="location-text">📍 ${escapeHtml(post.location)}</p>`
+                : "";
+
+            const groupBadgeHtml = post.visibility === "group" && post.group_name
+                ? `<p class="location-text">👥 ${escapeHtml(post.group_name)}</p>`
+                : "";
+
+            const newPostHtml = `
+                <div class="post-card" id="post-${post.id}">
+                    <h3>${escapeHtml(post.title)}</h3>
+                    <p>${escapeHtml(post.content)}</p>
+                    ${locationHtml}
+                    ${groupBadgeHtml}
+                    ${imageHtml}
+                    <small>
+                        By ${escapeHtml(post.author)}
+                        | ${post.created_at}
+                    </small>
+
+                    <div class="post-actions">
+                        <button
+                            type="button"
+                            class="like-button"
+                            data-post-id="${post.id}"
+                            onclick="toggleLike(this)"
+                        >
+                            ♡
+                        </button>
+
+                        <span class="like-count" id="like-count-${post.id}">
+                            0 likes · 0 comments
+                        </span>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="delete-button"
+                        data-post-id="${post.id}"
+                        onclick="deletePost(this)"
+                    >
+                        Delete
+                    </button>
+
+                    <div class="comment-section">
+                        <h4 id="comment-title-${post.id}">Comments (0)</h4>
+
+                        <div id="comment-list-${post.id}">
+                            <p class="no-comment-text" id="no-comment-text-${post.id}">No comments yet.</p>
+                        </div>
+
+                        <form onsubmit="submitComment(event, this); return false;" class="comment-form" data-post-id="${post.id}">
+                            <input type="text" name="content" placeholder="Write a comment...">
+                            <button type="submit">Comment</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            feedPosts.insertAdjacentHTML("afterbegin", newPostHtml);
+        }
+
+        form.reset();
+
+        const visibilitySelect = document.getElementById("visibility-select");
+        const groupWrapper = document.getElementById("group-select-wrapper");
+        const groupSelect = document.getElementById("group-select");
+
+        if (visibilitySelect && groupWrapper && groupSelect) {
+            if (visibilitySelect.value === "group") {
+                groupWrapper.style.display = "block";
+            } else {
+                groupWrapper.style.display = "none";
+                groupSelect.value = "";
+            }
+        }
+
+        showToast("Post created successfully!");
+    } catch (error) {
+        console.error("Create post failed:", error);
+        showToast("Failed to create post", "error");
+    }
+}
+</script>
 
 {% endblock %}
 

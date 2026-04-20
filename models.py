@@ -11,13 +11,38 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
 
-    posts = db.relationship("PublicPost", backref="author", lazy=True)
-    comments = db.relationship("Comment", backref="author", lazy=True)
-    group_messages = db.relationship("GroupMessage", backref="author", lazy=True)
+
+class Group(db.Model):
+    __tablename__ = "groups"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+    description = db.Column(db.String(255), nullable=True)
+
+    group_type = db.Column(db.String(30), nullable=False, default="public_open")
+    creator_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    invite_code = db.Column(db.String(20), unique=True, nullable=True)
+
+    creator = db.relationship("User", backref=db.backref("created_groups", lazy=True))
 
 
-class PublicPost(db.Model):
-    __tablename__ = "public_posts"
+class Membership(db.Model):
+    __tablename__ = "memberships"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+
+    user = db.relationship("User", backref=db.backref("memberships", lazy=True))
+    group = db.relationship("Group", backref=db.backref("memberships", lazy=True, cascade="all, delete-orphan"))
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "group_id", name="unique_membership"),
+    )
+
+
+class Post(db.Model):
+    __tablename__ = "posts"
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
@@ -26,10 +51,14 @@ class PublicPost(db.Model):
     location = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # public or group
+    visibility = db.Column(db.String(20), nullable=False, default="public")
 
-    comments = db.relationship("Comment", backref="post", lazy=True, cascade="all, delete-orphan")
-    likes = db.relationship("PostLike", backref="post", lazy=True, cascade="all, delete-orphan")
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=True)
+
+    author = db.relationship("User", backref=db.backref("posts", lazy=True))
+    group = db.relationship("Group", backref=db.backref("posts", lazy=True))
 
 
 class Comment(db.Model):
@@ -39,18 +68,22 @@ class Comment(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    post_id = db.Column(db.Integer, db.ForeignKey("public_posts.id"), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
-    likes = db.relationship("CommentLike", backref="comment", lazy=True, cascade="all, delete-orphan")
+    post = db.relationship("Post", backref=db.backref("comments", lazy=True, cascade="all, delete-orphan"))
+    author = db.relationship("User", backref=db.backref("comments", lazy=True))
 
 
 class PostLike(db.Model):
     __tablename__ = "post_likes"
 
     id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.Integer, db.ForeignKey("public_posts.id"), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    post = db.relationship("Post", backref=db.backref("likes", lazy=True, cascade="all, delete-orphan"))
+    user = db.relationship("User", backref=db.backref("post_likes", lazy=True))
 
     __table_args__ = (
         db.UniqueConstraint("post_id", "user_id", name="unique_post_like"),
@@ -64,31 +97,11 @@ class CommentLike(db.Model):
     comment_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
+    comment = db.relationship("Comment", backref=db.backref("likes", lazy=True, cascade="all, delete-orphan"))
+    user = db.relationship("User", backref=db.backref("comment_likes", lazy=True))
+
     __table_args__ = (
         db.UniqueConstraint("comment_id", "user_id", name="unique_comment_like"),
-    )
-
-
-class Group(db.Model):
-    __tablename__ = "groups"
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False, unique=True)
-    description = db.Column(db.String(255), nullable=True)
-
-    messages = db.relationship("GroupMessage", backref="group", lazy=True, cascade="all, delete-orphan")
-    memberships = db.relationship("Membership", backref="group", lazy=True, cascade="all, delete-orphan")
-
-
-class Membership(db.Model):
-    __tablename__ = "memberships"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
-
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "group_id", name="unique_membership"),
     )
 
 
@@ -101,3 +114,27 @@ class GroupMessage(db.Model):
 
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    group = db.relationship("Group", backref=db.backref("group_messages", lazy=True, cascade="all, delete-orphan"))
+    author = db.relationship("User", backref=db.backref("group_messages", lazy=True))
+
+
+class GroupJoinRequest(db.Model):
+    __tablename__ = "group_join_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+
+    status = db.Column(db.String(20), default="pending")
+    note = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("join_requests", lazy=True))
+    group = db.relationship("Group", backref=db.backref("join_requests", lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "group_id", name="unique_join_request"),
+    )
