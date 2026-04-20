@@ -1,3 +1,7 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from datetime import datetime
 import os
@@ -15,7 +19,6 @@ import string
 import re
 from sentence_transformers import SentenceTransformer
 import numpy as np
-import os
 import json
 import faiss
 from pathlib import Path
@@ -42,7 +45,14 @@ UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 #embedding
-embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+#embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+_embedding_model = None
+
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    return _embedding_model
 
 EMBED_DIR = Path("embedding_cache")
 PUBLIC_INDEX_PATH = EMBED_DIR / "public_posts.index"
@@ -56,13 +66,13 @@ GROUP_INDEX_DIR.mkdir(exist_ok=True)
 GROUP_META_DIR.mkdir(exist_ok=True)
 
 def get_embedding_dim():
-    return embedding_model.get_embedding_dimension()
+    return get_embedding_model().get_embedding_dimension()
 
 #encode
 def encode_texts(texts):
     if not texts:
         return np.zeros((0, get_embedding_dim()), dtype="float32")
-    return embedding_model.encode(
+    return get_embedding_model().encode(
         texts,
         convert_to_numpy=True,
         normalize_embeddings=True
@@ -70,7 +80,7 @@ def encode_texts(texts):
 
 
 def encode_query(text):
-    return embedding_model.encode(
+    return get_embedding_model().encode(
         text,
         convert_to_numpy=True,
         normalize_embeddings=True
@@ -1681,4 +1691,4 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         seed_groups()
-    app.run(debug=True)
+    app.run(debug=False)

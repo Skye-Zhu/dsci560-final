@@ -44,7 +44,16 @@
                 {% for comment in matched_comments %}
                     <div class="card">
                         <p><strong>{{ comment.author.username }}</strong>: {{ comment.content }}</p>
-                        <small>On post: {{ comment.post.title }}</small>
+                        <small>
+                            {% if comment.post %}
+                                Commented on:
+                                <a href="{{ url_for('home') }}#post-{{ comment.post.id }}" class="post-link">
+                                    {{ comment.post.title }}
+                                </a>
+                            {% else %}
+                                Original post unavailable
+                            {% endif %}
+                        </small>
                     </div>
                 {% endfor %}
             </div>

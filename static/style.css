@@ -536,3 +536,13 @@ button:hover, .button-link:hover {
 .shortcut-button:hover {
     background: #eef3f9;
 }
+
+.post-link {
+    color: #1d4ed8;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.post-link:hover {
+    opacity: 0.85;
+}
