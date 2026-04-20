@@ -13,6 +13,8 @@ from flask import jsonify
 import random
 import string
 import re
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
 
@@ -35,6 +37,8 @@ db.init_app(app)
 
 UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 def get_current_user():
     user_id = session.get("user_id")
@@ -136,7 +140,8 @@ def score_post(post, terms):
 
     return score
 
-def retrieve_relevant_public_posts(query, top_k=10):
+#public ai
+def retrieve_relevant_public_posts_keyword(query, top_k=10):
     terms = extract_search_terms(query)
 
     posts = Post.query.filter_by(
@@ -152,6 +157,34 @@ def retrieve_relevant_public_posts(query, top_k=10):
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [post for score, post in scored[:top_k]]
+
+def retrieve_relevant_public_posts_semantic(query, top_k=10, min_score=0.35):
+    posts = Post.query.filter_by(
+        visibility="public",
+        group_id=None
+    ).all()
+
+    if not posts:
+        return []
+
+    post_texts = [build_post_text(post) for post in posts]
+    post_embeddings = embedding_model.encode(post_texts, convert_to_numpy=True, normalize_embeddings=True)
+    query_embedding = embedding_model.encode(query, convert_to_numpy=True, normalize_embeddings=True)
+
+    scored = []
+    for post, emb in zip(posts, post_embeddings):
+        score = float(np.dot(query_embedding, emb))
+        if score >= min_score:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [post for score, post in scored[:top_k]]
+
+def retrieve_relevant_public_posts(query, top_k=10):
+    semantic_results = retrieve_relevant_public_posts_semantic(query, top_k=top_k)
+    if semantic_results:
+        return semantic_results
+    return retrieve_relevant_public_posts_keyword(query, top_k=top_k)
 
 def score_comment(comment, terms):
     score = 0
@@ -180,7 +213,10 @@ def retrieve_relevant_public_comments(query, top_k=15):
     scored.sort(key=lambda x: x[0], reverse=True)
     return [comment for score, comment in scored[:top_k]]
 
-def retrieve_relevant_group_posts(group_id, query, top_k=5):
+
+
+#group ai
+def retrieve_relevant_group_posts_keyword(group_id, query, top_k=5):
     terms = extract_search_terms(query)
 
     posts = Post.query.filter_by(
@@ -196,6 +232,42 @@ def retrieve_relevant_group_posts(group_id, query, top_k=5):
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [post for score, post in scored[:top_k]]
+
+def retrieve_relevant_group_posts_semantic(group_id, query, top_k=10, min_score=0.35):
+    posts = Post.query.filter_by(
+        visibility="group",
+        group_id=group_id
+    ).all()
+
+    if not posts:
+        return []
+
+    post_texts = [build_post_text(post) for post in posts]
+    post_embeddings = embedding_model.encode(
+        post_texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    )
+    query_embedding = embedding_model.encode(
+        query,
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    )
+
+    scored = []
+    for post, emb in zip(posts, post_embeddings):
+        score = float(np.dot(query_embedding, emb))
+        if score >= min_score:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [post for score, post in scored[:top_k]]
+
+def retrieve_relevant_group_posts(group_id, query, top_k=10):
+    semantic_results = retrieve_relevant_group_posts_semantic(group_id, query, top_k=top_k)
+    if semantic_results:
+        return semantic_results
+    return retrieve_relevant_group_posts_keyword(group_id, query, top_k=top_k)
 
 
 def score_message(message, terms):
@@ -252,6 +324,22 @@ def generate_invite_code(length=8):
         existing_group = Group.query.filter_by(invite_code=code).first()
         if not existing_group:
             return code
+        
+
+def build_post_text(post):
+    return f"""
+Title: {post.title or ''}
+Content: {post.content or ''}
+Location: {post.location or ''}
+""".strip()
+
+
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+
+
 
 @app.route("/")
 def index():
@@ -717,7 +805,9 @@ def join_group(group_id):
     elif group.group_type in ["public_approval", "private_approval"]:
         if existing_request:
             if existing_request.status == "pending":
-                flash("Your join request is already pending.", "info")
+                existing_request.note = note if note else None
+                db.session.commit()
+                flash("Your join request is already pending. Your note has been updated.", "info")
             elif existing_request.status == "approved":
                 flash("Your request has already been approved.", "info")
             elif existing_request.status == "rejected":
