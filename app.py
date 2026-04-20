@@ -15,7 +15,10 @@ import string
 import re
 from sentence_transformers import SentenceTransformer
 import numpy as np
-
+import os
+import json
+import faiss
+from pathlib import Path
 
 
 
@@ -38,7 +41,137 @@ db.init_app(app)
 UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+#embedding
 embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+EMBED_DIR = Path("embedding_cache")
+PUBLIC_INDEX_PATH = EMBED_DIR / "public_posts.index"
+PUBLIC_META_PATH = EMBED_DIR / "public_posts_meta.json"
+
+GROUP_INDEX_DIR = EMBED_DIR / "groups"
+GROUP_META_DIR = EMBED_DIR / "groups_meta"
+
+EMBED_DIR.mkdir(exist_ok=True)
+GROUP_INDEX_DIR.mkdir(exist_ok=True)
+GROUP_META_DIR.mkdir(exist_ok=True)
+
+def get_embedding_dim():
+    return embedding_model.get_embedding_dimension()
+
+#encode
+def encode_texts(texts):
+    if not texts:
+        return np.zeros((0, get_embedding_dim()), dtype="float32")
+    return embedding_model.encode(
+        texts,
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    ).astype("float32")
+
+
+def encode_query(text):
+    return embedding_model.encode(
+        text,
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    ).astype("float32")
+
+#faiss
+def create_faiss_index():
+    dim = get_embedding_dim()
+    return faiss.IndexIDMap(faiss.IndexFlatIP(dim))
+
+
+def save_index(index, index_path):
+    faiss.write_index(index, str(index_path))
+
+
+def load_index(index_path):
+    if not index_path.exists():
+        return None
+    return faiss.read_index(str(index_path))
+
+
+def save_metadata(meta, meta_path):
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def load_metadata(meta_path):
+    if not meta_path.exists():
+        return {}
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+    
+#index for public post
+def rebuild_public_post_index():
+    posts = Post.query.filter_by(
+        visibility="public",
+        group_id=None
+    ).all()
+
+    index = create_faiss_index()
+    meta = {}
+
+    if posts:
+        texts = [build_post_text(post) for post in posts]
+        embeddings = encode_texts(texts)
+        ids = np.array([post.id for post in posts], dtype="int64")
+
+        index.add_with_ids(embeddings, ids)
+
+        for post in posts:
+            meta[str(post.id)] = {
+                "title": post.title,
+                "visibility": post.visibility,
+                "group_id": post.group_id
+            }
+
+    save_index(index, PUBLIC_INDEX_PATH)
+    save_metadata(meta, PUBLIC_META_PATH)
+
+#index for group post
+def get_group_index_path(group_id):
+    return GROUP_INDEX_DIR / f"group_{group_id}.index"
+
+
+def get_group_meta_path(group_id):
+    return GROUP_META_DIR / f"group_{group_id}_meta.json"
+
+
+def rebuild_group_post_index(group_id):
+    posts = Post.query.filter_by(
+        visibility="group",
+        group_id=group_id
+    ).all()
+
+    index = create_faiss_index()
+    meta = {}
+
+    if posts:
+        texts = [build_post_text(post) for post in posts]
+        embeddings = encode_texts(texts)
+        ids = np.array([post.id for post in posts], dtype="int64")
+
+        index.add_with_ids(embeddings, ids)
+
+        for post in posts:
+            meta[str(post.id)] = {
+                "title": post.title,
+                "visibility": post.visibility,
+                "group_id": post.group_id
+            }
+
+    save_index(index, get_group_index_path(group_id))
+    save_metadata(meta, get_group_meta_path(group_id))
+
+#main
+def build_post_text(post):
+    return f"""
+Title: {post.title or ''}
+Content: {post.content or ''}
+Location: {post.location or ''}
+""".strip()
 
 def get_current_user():
     user_id = session.get("user_id")
@@ -159,26 +292,25 @@ def retrieve_relevant_public_posts_keyword(query, top_k=10):
     return [post for score, post in scored[:top_k]]
 
 def retrieve_relevant_public_posts_semantic(query, top_k=10, min_score=0.35):
-    posts = Post.query.filter_by(
-        visibility="public",
-        group_id=None
-    ).all()
-
-    if not posts:
+    index = load_index(PUBLIC_INDEX_PATH)
+    if index is None or index.ntotal == 0:
         return []
 
-    post_texts = [build_post_text(post) for post in posts]
-    post_embeddings = embedding_model.encode(post_texts, convert_to_numpy=True, normalize_embeddings=True)
-    query_embedding = embedding_model.encode(query, convert_to_numpy=True, normalize_embeddings=True)
+    query_vec = encode_query(query).reshape(1, -1)
+    scores, ids = index.search(query_vec, top_k)
 
-    scored = []
-    for post, emb in zip(posts, post_embeddings):
-        score = float(np.dot(query_embedding, emb))
-        if score >= min_score:
-            scored.append((score, post))
+    results = []
+    for score, post_id in zip(scores[0], ids[0]):
+        if post_id == -1:
+            continue
+        if float(score) < min_score:
+            continue
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [post for score, post in scored[:top_k]]
+        post = db.session.get(Post, int(post_id))
+        if post is not None:
+            results.append(post)
+
+    return results
 
 def retrieve_relevant_public_posts(query, top_k=10):
     semantic_results = retrieve_relevant_public_posts_semantic(query, top_k=top_k)
@@ -234,34 +366,27 @@ def retrieve_relevant_group_posts_keyword(group_id, query, top_k=5):
     return [post for score, post in scored[:top_k]]
 
 def retrieve_relevant_group_posts_semantic(group_id, query, top_k=10, min_score=0.35):
-    posts = Post.query.filter_by(
-        visibility="group",
-        group_id=group_id
-    ).all()
+    index_path = get_group_index_path(group_id)
+    index = load_index(index_path)
 
-    if not posts:
+    if index is None or index.ntotal == 0:
         return []
 
-    post_texts = [build_post_text(post) for post in posts]
-    post_embeddings = embedding_model.encode(
-        post_texts,
-        convert_to_numpy=True,
-        normalize_embeddings=True
-    )
-    query_embedding = embedding_model.encode(
-        query,
-        convert_to_numpy=True,
-        normalize_embeddings=True
-    )
+    query_vec = encode_query(query).reshape(1, -1)
+    scores, ids = index.search(query_vec, top_k)
 
-    scored = []
-    for post, emb in zip(posts, post_embeddings):
-        score = float(np.dot(query_embedding, emb))
-        if score >= min_score:
-            scored.append((score, post))
+    results = []
+    for score, post_id in zip(scores[0], ids[0]):
+        if post_id == -1:
+            continue
+        if float(score) < min_score:
+            continue
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [post for score, post in scored[:top_k]]
+        post = db.session.get(Post, int(post_id))
+        if post is not None and post.group_id == group_id and post.visibility == "group":
+            results.append(post)
+
+    return results
 
 def retrieve_relevant_group_posts(group_id, query, top_k=10):
     semantic_results = retrieve_relevant_group_posts_semantic(group_id, query, top_k=top_k)
@@ -540,6 +665,11 @@ def create_public_post():
 
     db.session.add(new_post)
     db.session.commit()
+    
+    if new_post.visibility == "public":
+        rebuild_public_post_index()
+    elif new_post.visibility == "group" and new_post.group_id:
+        rebuild_group_post_index(new_post.group_id)
 
     return jsonify({
         "success": True,
@@ -577,8 +707,16 @@ def delete_public_post(post_id):
     if post.author_id != current_user.id:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
+    post_visibility = post.visibility
+    post_group_id = post.group_id
+
     db.session.delete(post)
     db.session.commit()
+
+    if post_visibility == "public":
+        rebuild_public_post_index()
+    elif post_visibility == "group" and post_group_id:
+        rebuild_group_post_index(post_group_id)
 
     return jsonify({
         "success": True,
@@ -1231,6 +1369,16 @@ If the question asks for recent activity, focus more on recent content.
         no_data=False
     )
 
+#for old posts, delete after use
+@app.route("/rebuild_all_indexes")
+def rebuild_all_indexes():
+    rebuild_public_post_index()
+
+    group_ids = [g.id for g in Group.query.all()]
+    for gid in group_ids:
+        rebuild_group_post_index(gid)
+
+    return "All indexes rebuilt."
 
 if __name__ == "__main__":
     with app.app_context():
