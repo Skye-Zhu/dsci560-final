@@ -165,6 +165,220 @@ def rebuild_group_post_index(group_id):
     save_index(index, get_group_index_path(group_id))
     save_metadata(meta, get_group_meta_path(group_id))
 
+#index for comments
+def rebuild_public_comment_index():
+    comments = Comment.query.join(Post).filter(
+        Post.visibility == "public",
+        Post.group_id.is_(None)
+    ).all()
+
+    index = create_faiss_index()
+    meta = {}
+
+    if comments:
+        texts = [build_comment_text(comment) for comment in comments]
+        embeddings = encode_texts(texts)
+        ids = np.array([comment.id for comment in comments], dtype="int64")
+
+        index.add_with_ids(embeddings, ids)
+
+        for comment in comments:
+            meta[str(comment.id)] = {
+                "post_id": comment.post_id,
+                "author_id": comment.author_id
+            }
+
+    save_index(index, PUBLIC_COMMENT_INDEX_PATH)
+    save_metadata(meta, PUBLIC_COMMENT_META_PATH)
+
+def retrieve_relevant_public_comments_semantic(query, top_k=15, min_score=0.35):
+    index = load_index(PUBLIC_COMMENT_INDEX_PATH)
+    if index is None or index.ntotal == 0:
+        return []
+
+    query_vec = encode_query(query).reshape(1, -1)
+    scores, ids = index.search(query_vec, top_k)
+
+    results = []
+    for score, comment_id in zip(scores[0], ids[0]):
+        if comment_id == -1:
+            continue
+        if float(score) < min_score:
+            continue
+
+        comment = db.session.get(Comment, int(comment_id))
+        if comment is not None:
+            results.append(comment)
+
+    return results
+
+def retrieve_relevant_public_comments(query, top_k=15):
+    semantic_results = retrieve_relevant_public_comments_semantic(query, top_k=top_k)
+    if semantic_results:
+        return semantic_results
+    return retrieve_relevant_public_comments_keyword(query, top_k=top_k)
+
+#index for group message
+def build_group_message_text(message):
+    return f"""
+Message: {message.content or ''}
+Author: {message.author.username if message.author else ''}
+""".strip()
+
+GROUP_MESSAGE_INDEX_DIR = EMBED_DIR / "group_messages"
+GROUP_MESSAGE_META_DIR = EMBED_DIR / "group_messages_meta"
+
+GROUP_MESSAGE_INDEX_DIR.mkdir(exist_ok=True)
+GROUP_MESSAGE_META_DIR.mkdir(exist_ok=True)
+
+def get_group_message_index_path(group_id):
+    return GROUP_MESSAGE_INDEX_DIR / f"group_{group_id}_messages.index"
+
+
+def get_group_message_meta_path(group_id):
+    return GROUP_MESSAGE_META_DIR / f"group_{group_id}_messages_meta.json"
+
+def rebuild_group_message_index(group_id):
+    messages = GroupMessage.query.filter_by(group_id=group_id).all()
+
+    index = create_faiss_index()
+    meta = {}
+
+    if messages:
+        texts = [build_group_message_text(message) for message in messages]
+        embeddings = encode_texts(texts)
+        ids = np.array([message.id for message in messages], dtype="int64")
+
+        index.add_with_ids(embeddings, ids)
+
+        for message in messages:
+            meta[str(message.id)] = {
+                "group_id": message.group_id,
+                "author_id": message.author_id
+            }
+
+    save_index(index, get_group_message_index_path(group_id))
+    save_metadata(meta, get_group_message_meta_path(group_id))
+
+def retrieve_relevant_group_messages_semantic(group_id, query, top_k=15, min_score=0.35):
+    index = load_index(get_group_message_index_path(group_id))
+    if index is None or index.ntotal == 0:
+        return []
+
+    query_vec = encode_query(query).reshape(1, -1)
+    scores, ids = index.search(query_vec, top_k)
+
+    results = []
+    for score, message_id in zip(scores[0], ids[0]):
+        if message_id == -1:
+            continue
+        if float(score) < min_score:
+            continue
+
+        message = db.session.get(GroupMessage, int(message_id))
+        if message is not None and message.group_id == group_id:
+            results.append(message)
+
+    return results
+
+def retrieve_relevant_group_messages(group_id, query, top_k=15):
+    semantic_results = retrieve_relevant_group_messages_semantic(group_id, query, top_k=top_k)
+    if semantic_results:
+        return semantic_results
+    return retrieve_relevant_group_messages_keyword(group_id, query, top_k=top_k)
+
+#add index
+def add_post_to_public_index(post):
+    if post.visibility != "public" or post.group_id is not None:
+        return
+
+    index = load_index(PUBLIC_INDEX_PATH)
+    if index is None:
+        index = create_faiss_index()
+
+    text = build_post_text(post)
+    emb = encode_texts([text])
+    ids = np.array([post.id], dtype="int64")
+
+    # 如果已经存在同 id，先删再加，避免重复
+    index.remove_ids(ids)
+    index.add_with_ids(emb, ids)
+    save_index(index, PUBLIC_INDEX_PATH)
+
+    meta = load_metadata(PUBLIC_META_PATH)
+    meta[str(post.id)] = {
+        "title": post.title,
+        "visibility": post.visibility,
+        "group_id": post.group_id
+    }
+    save_metadata(meta, PUBLIC_META_PATH)
+
+
+def add_post_to_group_index(post):
+    if post.visibility != "group" or not post.group_id:
+        return
+
+    index_path = get_group_index_path(post.group_id)
+    meta_path = get_group_meta_path(post.group_id)
+
+    index = load_index(index_path)
+    if index is None:
+        index = create_faiss_index()
+
+    text = build_post_text(post)
+    emb = encode_texts([text])
+    ids = np.array([post.id], dtype="int64")
+
+    index.remove_ids(ids)
+    index.add_with_ids(emb, ids)
+    save_index(index, index_path)
+
+    meta = load_metadata(meta_path)
+    meta[str(post.id)] = {
+        "title": post.title,
+        "visibility": post.visibility,
+        "group_id": post.group_id
+    }
+    save_metadata(meta, meta_path)
+
+#delete index
+def remove_post_from_public_index(post_id):
+    index = load_index(PUBLIC_INDEX_PATH)
+    if index is not None:
+        ids = np.array([post_id], dtype="int64")
+        index.remove_ids(ids)
+        save_index(index, PUBLIC_INDEX_PATH)
+
+    meta = load_metadata(PUBLIC_META_PATH)
+    meta.pop(str(post_id), None)
+    save_metadata(meta, PUBLIC_META_PATH)
+
+
+def remove_post_from_group_index(group_id, post_id):
+    index_path = get_group_index_path(group_id)
+    meta_path = get_group_meta_path(group_id)
+
+    index = load_index(index_path)
+    if index is not None:
+        ids = np.array([post_id], dtype="int64")
+        index.remove_ids(ids)
+        save_index(index, index_path)
+
+    meta = load_metadata(meta_path)
+    meta.pop(str(post_id), None)
+    save_metadata(meta, meta_path)
+
+#add comment & message to embeddings
+def build_comment_text(comment):
+    return f"""
+Comment: {comment.content or ''}
+Post Title: {comment.post.title if comment.post else ''}
+Post Content: {comment.post.content if comment.post else ''}
+""".strip()
+
+PUBLIC_COMMENT_INDEX_PATH = EMBED_DIR / "public_comments.index"
+PUBLIC_COMMENT_META_PATH = EMBED_DIR / "public_comments_meta.json"
+
 #main
 def build_post_text(post):
     return f"""
@@ -328,7 +542,7 @@ def score_comment(comment, terms):
 
     return score
 
-def retrieve_relevant_public_comments(query, top_k=15):
+def retrieve_relevant_public_comments_keyword(query, top_k=15):
     terms = extract_search_terms(query)
 
     comments = Comment.query.join(Post).filter(
@@ -406,7 +620,7 @@ def score_message(message, terms):
     return score
 
 
-def retrieve_relevant_group_messages(group_id, query, top_k=10):
+def retrieve_relevant_group_messages_keyword(group_id, query, top_k=10):
     terms = extract_search_terms(query)
 
     messages = GroupMessage.query.filter_by(
@@ -451,12 +665,6 @@ def generate_invite_code(length=8):
             return code
         
 
-def build_post_text(post):
-    return f"""
-Title: {post.title or ''}
-Content: {post.content or ''}
-Location: {post.location or ''}
-""".strip()
 
 
 
@@ -667,9 +875,9 @@ def create_public_post():
     db.session.commit()
     
     if new_post.visibility == "public":
-        rebuild_public_post_index()
+        add_post_to_public_index(new_post)
     elif new_post.visibility == "group" and new_post.group_id:
-        rebuild_group_post_index(new_post.group_id)
+        add_post_to_group_index(new_post)
 
     return jsonify({
         "success": True,
@@ -714,9 +922,9 @@ def delete_public_post(post_id):
     db.session.commit()
 
     if post_visibility == "public":
-        rebuild_public_post_index()
+        remove_post_from_public_index(post_id)
     elif post_visibility == "group" and post_group_id:
-        rebuild_group_post_index(post_group_id)
+        remove_post_from_group_index(post_group_id, post_id)
 
     return jsonify({
         "success": True,
@@ -746,6 +954,8 @@ def add_comment(post_id):
 
     db.session.add(new_comment)
     db.session.commit()
+    if post.visibility == "public" and post.group_id is None:
+        rebuild_public_comment_index()
 
     return jsonify({
         "success": True,
@@ -773,9 +983,13 @@ def delete_comment(comment_id):
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     post_id = comment.post_id
+    post = db.session.get(Post, post_id)
 
     db.session.delete(comment)
     db.session.commit()
+
+    if post and post.visibility == "public" and post.group_id is None:
+        rebuild_public_comment_index()
 
     remaining_count = Comment.query.filter_by(post_id=post_id).count()
 
@@ -1169,6 +1383,8 @@ def send_group_message(group_id):
     db.session.add(new_message)
     db.session.commit()
 
+    rebuild_group_message_index(group_id)
+
     flash("Message sent!", "success")
     return redirect(url_for("group_detail", group_id=group_id))
 
@@ -1373,10 +1589,12 @@ If the question asks for recent activity, focus more on recent content.
 @app.route("/rebuild_all_indexes")
 def rebuild_all_indexes():
     rebuild_public_post_index()
+    rebuild_public_comment_index()
 
     group_ids = [g.id for g in Group.query.all()]
     for gid in group_ids:
         rebuild_group_post_index(gid)
+        rebuild_group_message_index(gid)
 
     return "All indexes rebuilt."
 
