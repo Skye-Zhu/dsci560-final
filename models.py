@@ -11,6 +11,10 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
 
+    display_name = db.Column(db.String(80), nullable=True)
+    bio = db.Column(db.String(255), nullable=True)
+    points = db.Column(db.Integer, nullable=False, default=0)
+
 
 class Group(db.Model):
     __tablename__ = "groups"

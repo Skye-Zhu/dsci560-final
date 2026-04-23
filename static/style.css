@@ -23,6 +23,13 @@ body {
 
 .nav-user {
     margin-right: 12px;
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.nav-user:hover {
+    text-decoration: underline;
 }
 
 .container {
@@ -141,11 +148,6 @@ button:hover, .button-link:hover {
     font-size: 14px;
 }
 
-.chat-box {
-    background: #eef3f9;
-    padding: 16px;
-    border-radius: 12px;
-}
 
 .location-text {
     font-size: 13px;
@@ -401,6 +403,8 @@ button:hover, .button-link:hover {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: 420px;
+    overflow-y: auto;
 }
 
 .chat-message {

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="section">
+    <h1>My Profile</h1>
+
+    <div class="card">
+        <h2>{{ current_user.display_name or current_user.username }}</h2>
+        <p><strong>Username:</strong> {{ current_user.username }}</p>
+        <p><strong>Points:</strong> {{ current_user.points }}</p>
+        <p><strong>Posts:</strong> {{ post_count }}</p>
+        <p><strong>Groups Joined:</strong> {{ group_count }}</p>
+
+        {% if current_user.bio %}
+            <p><strong>Bio:</strong> {{ current_user.bio }}</p>
+        {% else %}
+            <p><strong>Bio:</strong> No bio yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="section">
+    <h2>Edit Profile</h2>
+
+    <form method="POST" action="{{ url_for('profile') }}" class="form">
+        <label>Display Name</label>
+        <input type="text" name="display_name" value="{{ current_user.display_name or current_user.username }}">
+
+        <label>Bio</label>
+        <textarea name="bio" rows="4" placeholder="Write a short bio...">{{ current_user.bio or '' }}</textarea>
+
+        <button type="submit">Save Changes</button>
+    </form>
+</div>
+{% endblock %}

@@ -813,7 +813,9 @@ def register():
 
         new_user = User(
             username=username,
-            password=password
+            password=password,
+            display_name=username,
+            points=0
         )
 
         db.session.add(new_user)
@@ -893,6 +895,38 @@ def home():
         selected_group=selected_group
     )
 
+@app.route("/profile", methods=["GET", "POST"])
+def profile():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        display_name = request.form.get("display_name", "").strip()
+        bio = request.form.get("bio", "").strip()
+
+        if not display_name:
+            flash("Display name cannot be empty.", "error")
+            return redirect(url_for("profile"))
+
+        current_user.display_name = display_name
+        current_user.bio = bio if bio else None
+
+        db.session.commit()
+        flash("Profile updated successfully!", "success")
+        return redirect(url_for("profile"))
+
+    post_count = Post.query.filter_by(author_id=current_user.id).count()
+    group_count = Membership.query.filter_by(user_id=current_user.id).count()
+
+    return render_template(
+        "profile.html",
+        current_user=current_user,
+        post_count=post_count,
+        group_count=group_count
+    )
+
 @app.route("/create_public_post", methods=["POST"])
 def create_public_post():
     if not is_logged_in():
@@ -958,6 +992,7 @@ def create_public_post():
     )
 
     db.session.add(new_post)
+    current_user.points += 10
     db.session.commit()
     
     if new_post.visibility == "public":
