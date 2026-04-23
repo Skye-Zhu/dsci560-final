@@ -846,7 +846,7 @@ def home():
 
     query = Post.query
 
-    # 先处理帖子范围
+
     if group_filter:
         query = query.filter(
             Post.visibility == "group",
@@ -858,7 +858,6 @@ def home():
         else:
             query = query.filter(Post.visibility == "public")
 
-    # 搜索
     if keyword:
         query = query.filter(
             or_(
@@ -1343,7 +1342,6 @@ def create_group():
         db.session.add(new_group)
         db.session.commit()
 
-        # 创建后自动加入 group
         new_membership = Membership(
             user_id=current_user.id,
             group_id=new_group.id
@@ -1369,7 +1367,6 @@ def group_detail(group_id):
 
     group = Group.query.get_or_404(group_id)
 
-    # 这里判断你是不是 member（你刚刚问的第一段）
     membership = Membership.query.filter_by(
         user_id=current_user.id,
         group_id=group.id
@@ -1377,10 +1374,8 @@ def group_detail(group_id):
 
     is_member = membership is not None
 
-    # 判断是不是 creator
     is_creator = (group.creator_id == current_user.id)
 
-    #  如果是 creator，就查 pending requests
     pending_requests = []
     if is_creator:
         pending_requests = GroupJoinRequest.query.filter_by(
@@ -1388,7 +1383,6 @@ def group_detail(group_id):
             status="pending"
         ).all()
 
-    # 你之前页面用的 posts / messages 也要一起传
     group_posts = Post.query.filter_by(
         group_id=group.id,
         visibility="group"
@@ -1398,7 +1392,6 @@ def group_detail(group_id):
         group_id=group.id
     ).order_by(GroupMessage.created_at.asc()).all()
 
-    #  关键：把这些变量传给 HTML（你刚刚问的第二段就在这里）
     return render_template(
         "group_detail.html",
         group=group,
