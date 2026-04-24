@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="section">
+    <h1>Notifications</h1>
+
+    {% if notifications %}
+        {% for notification in notifications %}
+            <div class="card">
+                <p>
+                    {% if not notification.is_read %}
+                        <strong>[New]</strong>
+                    {% endif %}
+                    {{ notification.message }}
+                </p>
+
+                <small>{{ notification.created_at.strftime("%Y-%m-%d %H:%M") }}</small>
+
+                <div style="margin-top: 10px;">
+                    {% if notification.post_id %}
+                        <a class="button-link" href="{{ url_for('home') }}">View Related Post</a>
+                    {% endif %}
+
+                    {% if not notification.is_read %}
+                        <form method="POST" action="{{ url_for('mark_notification_read', notification_id=notification.id) }}" style="display:inline;">
+                            <button type="submit">Mark as Read</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No notifications yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

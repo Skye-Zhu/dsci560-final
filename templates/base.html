@@ -26,6 +26,17 @@
                 >
             </form>
 
+            <a href="{{ url_for('notifications') }}" class="nav-bell">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.104-14.938A1 1 0 0 0 7 2c-2.28 0-4 1.72-4 4v3.586l-.707.707A1 1 0 0 0 3 12h10a1 1 0 0 0 .707-1.707L13 9.586V6c0-2.28-1.72-4-4-4a1 1 0 0 0-.896-.938z"/>
+                </svg>
+
+                {% if unread_notification_count is defined and unread_notification_count > 0 %}
+                    <span class="notification-badge">
+                        {{ unread_notification_count if unread_notification_count < 10 else '9+' }}
+                    </span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('profile') }}" class="nav-user">
                 Logged in as {{ current_user.display_name if current_user is defined and current_user.display_name else session.get('username') }}
             </a>

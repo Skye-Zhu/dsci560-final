@@ -108,6 +108,28 @@ class CommentLike(db.Model):
         db.UniqueConstraint("comment_id", "user_id", name="unique_comment_like"),
     )
 
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)   # 收通知的人
+    sender_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False) # 触发动作的人
+
+    notification_type = db.Column(db.String(30), nullable=False)  # post_like / comment
+    message = db.Column(db.String(255), nullable=False)
+
+    post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=True)
+
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", foreign_keys=[user_id], backref=db.backref("notifications", lazy=True, cascade="all, delete-orphan"))
+    sender = db.relationship("User", foreign_keys=[sender_id])
+    post = db.relationship("Post", backref=db.backref("notifications", lazy=True))
+    comment = db.relationship("Comment", backref=db.backref("notifications", lazy=True))
+
 
 class GroupMessage(db.Model):
     __tablename__ = "group_messages"

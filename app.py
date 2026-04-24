@@ -7,10 +7,10 @@ from datetime import datetime
 import os
 from werkzeug.utils import secure_filename
 from models import (
-    db, User, Post, Comment, PostLike, CommentLike,
-    Group, Membership, GroupMessage, GroupJoinRequest
+    db, User, Group, Membership, Post,
+    Comment, PostLike, CommentLike, GroupMessage,
+    GroupJoinRequest, Notification
 )
-from sqlalchemy import or_
 from sqlalchemy import or_
 import requests
 from flask import jsonify
@@ -40,6 +40,24 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
+
+@app.context_processor
+def inject_notification_count():
+    current_user = get_current_user()
+
+    if not current_user:
+        return {
+            "unread_notification_count": 0
+        }
+
+    unread_count = Notification.query.filter_by(
+        user_id=current_user.id,
+        is_read=False
+    ).count()
+
+    return {
+        "unread_notification_count": unread_count
+    }
 
 UPLOAD_FOLDER = "static/uploads"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -1073,6 +1091,15 @@ def add_comment(post_id):
     )
 
     db.session.add(new_comment)
+    if post.author_id != current_user.id:
+        notification = Notification(
+            user_id=post.author_id,
+            sender_id=current_user.id,
+            notification_type="comment",
+            message=f"{current_user.display_name or current_user.username} commented on your post.",
+            post_id=post.id
+        )
+        db.session.add(notification)
     db.session.commit()
     if post.visibility == "public" and post.group_id is None:
         add_comment_to_public_index(new_comment)
@@ -1151,6 +1178,17 @@ def toggle_like(post_id):
         db.session.add(new_like)
         liked = True
 
+        # 不给自己发通知
+        if post.author_id != current_user.id:
+            notification = Notification(
+                user_id=post.author_id,
+                sender_id=current_user.id,
+                notification_type="post_like",
+                message=f"{current_user.display_name or current_user.username} liked your post.",
+                post_id=post.id
+            )
+            db.session.add(notification)
+
     db.session.commit()
 
     like_count = PostLike.query.filter_by(post_id=post_id).count()
@@ -1197,6 +1235,41 @@ def toggle_comment_like(comment_id):
         "liked": liked,
         "like_count": like_count
     })
+
+@app.route("/notifications")
+def notifications():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    notifications = Notification.query.filter_by(
+        user_id=current_user.id
+    ).order_by(Notification.created_at.desc()).all()
+
+    return render_template(
+        "notifications.html",
+        current_user=current_user,
+        notifications=notifications
+    )
+
+@app.route("/notifications/mark_read/<int:notification_id>", methods=["POST"])
+def mark_notification_read(notification_id):
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    notification = db.session.get(Notification, notification_id)
+
+    if not notification or notification.user_id != current_user.id:
+        flash("Notification not found.", "error")
+        return redirect(url_for("notifications"))
+
+    notification.is_read = True
+    db.session.commit()
+
+    return redirect(url_for("notifications"))
 
 @app.route("/groups")
 def group_list():
