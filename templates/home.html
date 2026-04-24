@@ -626,5 +626,26 @@ async function submitPost(event, form) {
 }
 </script>
 
+{% if target_post_id %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const target = document.getElementById("post-{{ target_post_id }}");
+
+    if (target) {
+        target.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+        });
+
+        target.classList.add("highlight-post");
+
+        setTimeout(() => {
+            target.classList.remove("highlight-post");
+        }, 2500);
+    }
+});
+</script>
+{% endif %}
+
 {% endblock %}
 

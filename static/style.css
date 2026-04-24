@@ -570,3 +570,17 @@ button:hover, .button-link:hover {
 .post-link:hover {
     opacity: 0.85;
 }
+
+.highlight-post {
+    outline: 3px solid #f7c948;
+    box-shadow: 0 0 0 6px rgba(247, 201, 72, 0.25);
+    transition: box-shadow 0.3s ease, outline 0.3s ease;
+}
+
+.back-button {
+    background: none;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    font-size: 14px;
+}

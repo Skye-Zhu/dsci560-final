@@ -861,6 +861,15 @@ def home():
     keyword = request.args.get("q", "").strip()
     view = request.args.get("view", "all").strip()
     group_filter = request.args.get("group_id", "").strip()
+    target_post_id = request.args.get("post_id", "").strip()
+
+    if target_post_id:
+        target_post = db.session.get(Post, int(target_post_id))
+        if target_post:
+            if target_post.visibility == "group":
+                group_filter = str(target_post.group_id)
+            else:
+                view = "all"
 
     query = Post.query
 
@@ -909,7 +918,8 @@ def home():
         keyword=keyword,
         view=view,
         group_filter=group_filter,
-        selected_group=selected_group
+        selected_group=selected_group,
+        target_post_id=target_post_id
     )
 
 @app.route("/profile", methods=["GET", "POST"])
@@ -1268,6 +1278,27 @@ def mark_notification_read(notification_id):
 
     notification.is_read = True
     db.session.commit()
+
+    return redirect(url_for("notifications"))
+
+@app.route("/notifications/open/<int:notification_id>")
+def open_notification(notification_id):
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    notification = db.session.get(Notification, notification_id)
+
+    if not notification or notification.user_id != current_user.id:
+        flash("Notification not found.", "error")
+        return redirect(url_for("notifications"))
+
+    notification.is_read = True
+    db.session.commit()
+
+    if notification.post_id:
+        return redirect(url_for("home", post_id=notification.post_id))
 
     return redirect(url_for("notifications"))
 

@@ -4,6 +4,12 @@
 <div class="section">
     <h1>Notifications</h1>
 
+    <div style="margin-bottom: 15px;">
+        <button onclick="goBack()" class="button-link">
+            ← Back
+        </button>
+    </div>
+
     {% if notifications %}
         {% for notification in notifications %}
             <div class="card">
@@ -18,7 +24,9 @@
 
                 <div style="margin-top: 10px;">
                     {% if notification.post_id %}
-                        <a class="button-link" href="{{ url_for('home') }}">View Related Post</a>
+                        <a class="button-link" href="{{ url_for('open_notification', notification_id=notification.id) }}">
+                            View Related Post
+                        </a>
                     {% endif %}
 
                     {% if not notification.is_read %}
@@ -33,4 +41,15 @@
         <p>No notifications yet.</p>
     {% endif %}
 </div>
+
+<script>
+function goBack() {
+    if (document.referrer) {
+        window.history.back();
+    } else {
+        window.location.href = "{{ url_for('home') }}";
+    }
+}
+</script>
+
 {% endblock %}
