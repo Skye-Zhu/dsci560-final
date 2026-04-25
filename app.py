@@ -809,6 +809,56 @@ def fetch_fishing_conditions(lat, lon):
 
     return weather, marine
 
+def score_fishing_hour(row):
+    score = 100
+    reasons = []
+
+    wind = row.get("wind_speed")
+    gust = row.get("wind_gust")
+    wave = row.get("wave_height")
+    rain = row.get("precip_prob")
+
+    if wind is not None:
+        if wind > 30:
+            score -= 30
+            reasons.append("high wind")
+        elif wind > 20:
+            score -= 15
+            reasons.append("moderate wind")
+
+    if gust is not None:
+        if gust > 40:
+            score -= 25
+            reasons.append("strong gusts")
+        elif gust > 30:
+            score -= 10
+            reasons.append("moderate gusts")
+
+    if wave is not None:
+        if wave > 1.5:
+            score -= 30
+            reasons.append("rough waves")
+        elif wave > 1.0:
+            score -= 15
+            reasons.append("moderate waves")
+
+    if rain is not None:
+        if rain > 50:
+            score -= 25
+            reasons.append("high rain chance")
+        elif rain > 20:
+            score -= 10
+            reasons.append("some rain chance")
+
+    if score >= 75:
+        level = "Good"
+    elif score >= 50:
+        level = "Moderate"
+    else:
+        level = "Poor"
+
+    return score, level, reasons
+
 
 
 
@@ -1922,6 +1972,12 @@ def conditions():
                 "swell_period": hourly_marine.get("swell_wave_period", [None] * 12)[i] if i < len(hourly_marine.get("swell_wave_period", [])) else None,
             })
 
+        for row in hourly_rows:
+            score, level, reasons = score_fishing_hour(row)
+            row["score"] = score
+            row["level"] = level
+            row["reasons"] = reasons
+
         result = {
             "spot": selected_spot,
             "current": current,
@@ -1931,25 +1987,22 @@ def conditions():
         prompt = f"""
 You are a fishing condition assistant.
 
-Use ONLY the hourly weather and marine data below.
-The user wants to know which hours are safer and more favorable for fishing.
+Use ONLY the scored hourly data below.
+Do NOT exaggerate small differences.
+A precipitation probability below 10% should be treated as low.
+Wave height differences smaller than 0.2 meters should not be treated as meaningful.
+Wind speed is in km/h, wave height is in meters.
 
-Location: {selected_spot}
-
-Current weather:
-{current}
-
-Hourly conditions for the next 12 hours:
+Hourly scored conditions:
 {hourly_rows}
 
-Provide:
-- Overall fishing condition
-- Best 2-3 hour fishing window
-- Hours to avoid
-- Wind concerns
-- Wave and swell concerns
-- Practical recommendation for beginners
-- Limitations of the data
+Your task:
+- Select the best 2-3 hour window based mainly on score
+- Explain the main reasons using the score, wind, gust, wave, and rain values
+- Identify hours to avoid only if risk is clearly higher
+- Do not claim precipitation is significant unless it is above 20%
+- Do not claim waves are worse unless wave height is meaningfully higher
+- Keep the explanation concise and practical
 """
 
         ai_summary = call_llm(prompt)

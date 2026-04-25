@@ -45,6 +45,8 @@
                         <th>Wave Period</th>
                         <th>Swell</th>
                         <th>Rain %</th>
+                        <th>Score</th>
+                        <th>Level</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -58,6 +60,8 @@
                             <td>{{ row.wave_period }} s</td>
                             <td>{{ row.swell_height }} m</td>
                             <td>{{ row.precip_prob }}%</td>
+                            <td>{{ row.score }}</td>
+                            <td>{{ row.level }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
