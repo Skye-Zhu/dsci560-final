@@ -12,6 +12,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    position: relative;
+    z-index: 1000;
 }
 
 .navbar a {
@@ -583,4 +586,15 @@ button:hover, .button-link:hover {
     color: #007bff;
     cursor: pointer;
     font-size: 14px;
+}
+
+.notification-badge-inline {
+    display: inline-block;
+    background: red;
+    color: white;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-weight: bold;
+    margin-left: 8px;
 }

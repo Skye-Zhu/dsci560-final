@@ -26,6 +26,11 @@
                     {% endif %}
 
                     <a class="button-link" href="{{ url_for('group_detail', group_id=group.id) }}">Enter Group</a>
+                    {% if unread_counts.get(group.id, 0) > 0 %}
+                        <span class="notification-badge-inline">
+                            {{ unread_counts.get(group.id) }} new
+                        </span>
+                    {% endif %}
                 </div>
             {% endfor %}
         </div>

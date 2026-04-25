@@ -903,6 +903,16 @@ def home():
     user_group_ids = [m.group_id for m in memberships]
     my_groups = Group.query.filter(Group.id.in_(user_group_ids)).all() if user_group_ids else []
 
+    unread_counts = {}
+
+    for membership in memberships:
+        query = GroupMessage.query.filter_by(group_id=membership.group_id)
+
+        if membership.last_read_at:
+            query = query.filter(GroupMessage.created_at > membership.last_read_at)
+
+        unread_counts[membership.group_id] = query.count()
+
     selected_group = None
     if group_filter:
         selected_group = db.session.get(Group, int(group_filter))
@@ -919,7 +929,8 @@ def home():
         view=view,
         group_filter=group_filter,
         selected_group=selected_group,
-        target_post_id=target_post_id
+        target_post_id=target_post_id,
+        unread_counts=unread_counts
     )
 
 @app.route("/profile", methods=["GET", "POST"])
@@ -1314,6 +1325,16 @@ def group_list():
     memberships = Membership.query.filter_by(user_id=current_user.id).all()
     my_group_ids = [m.group_id for m in memberships]
     my_groups = Group.query.filter(Group.id.in_(my_group_ids)).all() if my_group_ids else []
+    
+    unread_counts = {}
+
+    for membership in memberships:
+        query = GroupMessage.query.filter_by(group_id=membership.group_id)
+
+        if membership.last_read_at:
+            query = query.filter(GroupMessage.created_at > membership.last_read_at)
+
+        unread_counts[membership.group_id] = query.count()
 
     requests = GroupJoinRequest.query.filter_by(user_id=current_user.id).all()
     pending_request_ids = [r.group_id for r in requests if r.status == "pending"]
@@ -1346,7 +1367,8 @@ def group_list():
         discover_groups=discover_groups,
         my_group_ids=my_group_ids,
         pending_request_ids=pending_request_ids,
-        keyword=keyword
+        keyword=keyword,
+        unread_counts=unread_counts
     )
 
 
@@ -1477,6 +1499,10 @@ def group_detail(group_id):
     ).first()
 
     is_member = membership is not None
+
+    if membership:
+        membership.last_read_at = datetime.utcnow()
+        db.session.commit()
 
     is_creator = (group.creator_id == current_user.id)
 

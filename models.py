@@ -36,6 +36,7 @@ class Membership(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
+    last_read_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User", backref=db.backref("memberships", lazy=True))
     group = db.relationship("Group", backref=db.backref("memberships", lazy=True, cascade="all, delete-orphan"))
