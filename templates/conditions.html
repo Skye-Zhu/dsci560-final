@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="section">
+    <h1>Fishing Conditions</h1>
+    <p>Check weather, wind, and wave conditions before planning a fishing trip.</p>
+
+    <form method="POST" action="{{ url_for('conditions') }}" class="form">
+        <label>Select Location</label>
+        <select name="spot">
+            {% for spot in spots %}
+                <option value="{{ spot }}" {% if selected_spot == spot %}selected{% endif %}>
+                    {{ spot }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">Check Conditions</button>
+    </form>
+</div>
+
+{% if result %}
+<div class="section">
+    <h2>{{ result.spot }} Conditions</h2>
+
+    <div class="card">
+        <h3>Current Weather</h3>
+        <p><strong>Temperature:</strong> {{ result.current.temperature_2m }} °C</p>
+        <p><strong>Wind Speed:</strong> {{ result.current.wind_speed_10m }} km/h</p>
+        <p><strong>Wind Direction:</strong> {{ result.current.wind_direction_10m }}°</p>
+        <p><strong>Precipitation:</strong> {{ result.current.precipitation }} mm</p>
+    </div>
+
+    <div class="section">
+        <h2>Next 12 Hours</h2>
+        <div class="card">
+            <table class="conditions-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Temp</th>
+                        <th>Wind</th>
+                        <th>Gust</th>
+                        <th>Wave</th>
+                        <th>Wave Period</th>
+                        <th>Swell</th>
+                        <th>Rain %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in result.hourly_rows %}
+                        <tr>
+                            <td>{{ row.time[11:16] }}</td>
+                            <td>{{ row.temperature }} °C</td>
+                            <td>{{ row.wind_speed }} km/h</td>
+                            <td>{{ row.wind_gust }} km/h</td>
+                            <td>{{ row.wave_height }} m</td>
+                            <td>{{ row.wave_period }} s</td>
+                            <td>{{ row.swell_height }} m</td>
+                            <td>{{ row.precip_prob }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if ai_summary %}
+<div class="section">
+    <h2>AI Fishing Condition Summary</h2>
+    <div class="ai-result-card">
+        <pre class="ai-result-text">{{ ai_summary }}</pre>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% endblock %}

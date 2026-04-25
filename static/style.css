@@ -598,3 +598,21 @@ button:hover, .button-link:hover {
     font-weight: bold;
     margin-left: 8px;
 }
+
+.conditions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.conditions-table th,
+.conditions-table td {
+    padding: 10px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+
+.conditions-table th {
+    background: #f3f6fa;
+    font-weight: 700;
+}

@@ -776,8 +776,44 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
+#weather & tide & wind
+FISHING_SPOTS = {
+    "Long Beach": (33.7701, -118.1937),
+    "Santa Monica": (34.0195, -118.4912),
+    "Newport Beach": (33.6189, -117.9298),
+    "San Diego": (32.7157, -117.1611),
+    "Catalina Island": (33.3879, -118.4163),
+}
+
+def fetch_fishing_conditions(lat, lon):
+    weather_url = "https://api.open-meteo.com/v1/forecast"
+    marine_url = "https://marine-api.open-meteo.com/v1/marine"
+
+    weather_params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m",
+        "hourly": "temperature_2m,precipitation_probability,wind_speed_10m,wind_gusts_10m",
+        "timezone": "auto"
+    }
+
+    marine_params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_period",
+        "timezone": "auto"
+    }
+
+    weather = requests.get(weather_url, params=weather_params, timeout=10).json()
+    marine = requests.get(marine_url, params=marine_params, timeout=10).json()
+
+    return weather, marine
 
 
+
+
+
+# route
 @app.route("/")
 def index():
     current_user = get_current_user()
@@ -1844,6 +1880,89 @@ def rebuild_all_indexes():
         rebuild_group_message_index(gid)
 
     return "All indexes rebuilt."
+
+
+
+#weather & tide & wind
+
+@app.route("/conditions", methods=["GET", "POST"])
+def conditions():
+    current_user = get_current_user()
+    if not current_user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    result = None
+    ai_summary = None
+    selected_spot = None
+
+    if request.method == "POST":
+        selected_spot = request.form.get("spot")
+
+        lat, lon = FISHING_SPOTS[selected_spot]
+        weather, marine = fetch_fishing_conditions(lat, lon)
+
+        current = weather.get("current", {})
+        hourly_weather = weather.get("hourly", {})
+        hourly_marine = marine.get("hourly", {})
+
+        hourly_rows = []
+        times = hourly_weather.get("time", [])[:12]
+
+        for i, t in enumerate(times):
+            hourly_rows.append({
+                "time": t,
+                "temperature": hourly_weather.get("temperature_2m", [None] * 12)[i],
+                "precip_prob": hourly_weather.get("precipitation_probability", [None] * 12)[i],
+                "wind_speed": hourly_weather.get("wind_speed_10m", [None] * 12)[i],
+                "wind_gust": hourly_weather.get("wind_gusts_10m", [None] * 12)[i],
+                "wave_height": hourly_marine.get("wave_height", [None] * 12)[i] if i < len(hourly_marine.get("wave_height", [])) else None,
+                "wave_period": hourly_marine.get("wave_period", [None] * 12)[i] if i < len(hourly_marine.get("wave_period", [])) else None,
+                "swell_height": hourly_marine.get("swell_wave_height", [None] * 12)[i] if i < len(hourly_marine.get("swell_wave_height", [])) else None,
+                "swell_period": hourly_marine.get("swell_wave_period", [None] * 12)[i] if i < len(hourly_marine.get("swell_wave_period", [])) else None,
+            })
+
+        result = {
+            "spot": selected_spot,
+            "current": current,
+            "hourly_rows": hourly_rows
+        }
+
+        prompt = f"""
+You are a fishing condition assistant.
+
+Use ONLY the hourly weather and marine data below.
+The user wants to know which hours are safer and more favorable for fishing.
+
+Location: {selected_spot}
+
+Current weather:
+{current}
+
+Hourly conditions for the next 12 hours:
+{hourly_rows}
+
+Provide:
+- Overall fishing condition
+- Best 2-3 hour fishing window
+- Hours to avoid
+- Wind concerns
+- Wave and swell concerns
+- Practical recommendation for beginners
+- Limitations of the data
+"""
+
+        ai_summary = call_llm(prompt)
+
+    return render_template(
+        "conditions.html",
+        current_user=current_user,
+        spots=FISHING_SPOTS.keys(),
+        result=result,
+        ai_summary=ai_summary,
+        selected_spot=selected_spot
+    )
+
 
 if __name__ == "__main__":
     with app.app_context():
