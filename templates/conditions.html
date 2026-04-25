@@ -15,13 +15,24 @@
             {% endfor %}
         </select>
 
+        <label>Select Date</label>
+        <input type="date" name="date" value="{{ selected_date or '' }}" required>
+
+        <label>Select Start Time</label>
+        <input type="time" name="time" value="{{ selected_time or '' }}" required>
+
         <button type="submit">Check Conditions</button>
     </form>
 </div>
 
 {% if result %}
 <div class="section">
-    <h2>{{ result.spot }} Conditions</h2>
+    <h2>
+        {{ result.spot }} Conditions
+        {% if result.selected_date and result.selected_time %}
+            from {{ result.selected_date }} {{ result.selected_time }}
+        {% endif %}
+    </h2>
 
     <div class="card">
         <h3>Current Weather</h3>

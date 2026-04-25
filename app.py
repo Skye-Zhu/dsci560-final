@@ -22,6 +22,7 @@ import numpy as np
 import json
 import faiss
 from pathlib import Path
+from datetime import datetime
 
 
 
@@ -1945,9 +1946,22 @@ def conditions():
     result = None
     ai_summary = None
     selected_spot = None
+    selected_date = None
+    selected_time = None
 
     if request.method == "POST":
         selected_spot = request.form.get("spot")
+        selected_date = request.form.get("date")
+        selected_time = request.form.get("time")
+
+        if not selected_date or not selected_time:
+            flash("Please select both date and start time.", "error")
+            return redirect(url_for("conditions"))
+
+        selected_datetime = datetime.strptime(
+            f"{selected_date} {selected_time}",
+            "%Y-%m-%d %H:%M"
+        )
 
         lat, lon = FISHING_SPOTS[selected_spot]
         weather, marine = fetch_fishing_conditions(lat, lon)
@@ -1957,19 +1971,30 @@ def conditions():
         hourly_marine = marine.get("hourly", {})
 
         hourly_rows = []
-        times = hourly_weather.get("time", [])[:12]
+        all_times = hourly_weather.get("time", [])
+        start_index = 0
+
+        for i, t in enumerate(all_times):
+            api_time = datetime.strptime(t, "%Y-%m-%dT%H:%M")
+            if api_time >= selected_datetime:
+                start_index = i
+                break
+
+        times = all_times[start_index:start_index + 12]
 
         for i, t in enumerate(times):
+            idx = start_index + i
+
             hourly_rows.append({
                 "time": t,
-                "temperature": hourly_weather.get("temperature_2m", [None] * 12)[i],
-                "precip_prob": hourly_weather.get("precipitation_probability", [None] * 12)[i],
-                "wind_speed": hourly_weather.get("wind_speed_10m", [None] * 12)[i],
-                "wind_gust": hourly_weather.get("wind_gusts_10m", [None] * 12)[i],
-                "wave_height": hourly_marine.get("wave_height", [None] * 12)[i] if i < len(hourly_marine.get("wave_height", [])) else None,
-                "wave_period": hourly_marine.get("wave_period", [None] * 12)[i] if i < len(hourly_marine.get("wave_period", [])) else None,
-                "swell_height": hourly_marine.get("swell_wave_height", [None] * 12)[i] if i < len(hourly_marine.get("swell_wave_height", [])) else None,
-                "swell_period": hourly_marine.get("swell_wave_period", [None] * 12)[i] if i < len(hourly_marine.get("swell_wave_period", [])) else None,
+                "temperature": hourly_weather.get("temperature_2m", [None] * len(all_times))[idx],
+                "precip_prob": hourly_weather.get("precipitation_probability", [None] * len(all_times))[idx],
+                "wind_speed": hourly_weather.get("wind_speed_10m", [None] * len(all_times))[idx],
+                "wind_gust": hourly_weather.get("wind_gusts_10m", [None] * len(all_times))[idx],
+                "wave_height": hourly_marine.get("wave_height", [None] * len(all_times))[idx] if idx < len(hourly_marine.get("wave_height", [])) else None,
+                "wave_period": hourly_marine.get("wave_period", [None] * len(all_times))[idx] if idx < len(hourly_marine.get("wave_period", [])) else None,
+                "swell_height": hourly_marine.get("swell_wave_height", [None] * len(all_times))[idx] if idx < len(hourly_marine.get("swell_wave_height", [])) else None,
+                "swell_period": hourly_marine.get("swell_wave_period", [None] * len(all_times))[idx] if idx < len(hourly_marine.get("swell_wave_period", [])) else None,
             })
 
         for row in hourly_rows:
@@ -1981,7 +2006,9 @@ def conditions():
         result = {
             "spot": selected_spot,
             "current": current,
-            "hourly_rows": hourly_rows
+            "hourly_rows": hourly_rows,
+            "selected_date": selected_date,
+            "selected_time": selected_time
         }
 
         prompt = f"""
@@ -2013,7 +2040,9 @@ Your task:
         spots=FISHING_SPOTS.keys(),
         result=result,
         ai_summary=ai_summary,
-        selected_spot=selected_spot
+        selected_spot=selected_spot,
+        selected_date=selected_date,
+        selected_time=selected_time
     )
 
 
