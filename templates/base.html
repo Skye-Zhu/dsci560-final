@@ -9,23 +9,12 @@
 <body>
     {% if session.get('username') %}
     <nav class="navbar">
-        <div class="nav-left">
-            <a href="{{ url_for('home') }}">Home</a>
-            <a href="{{ url_for('group_list') }}">Groups</a>
-            <a href="{{ url_for('conditions') }}">Conditions</a>
-        </div>
-        <div class="nav-right">
-
-            <form method="GET" action="{{ url_for('home') }}" class="nav-search-form">
-                <input type="hidden" name="view" value="{{ view if view is defined else 'all' }}">
-                <input 
-                    type="text" 
-                    name="q" 
-                    placeholder="Search..." 
-                    class="nav-search-input"
-                    value="{{ keyword if keyword is defined else '' }}"
-                >
-            </form>
+        <div class="nav-top-row">
+            <div class="nav-left">
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('group_list') }}">Groups</a>
+                <a href="{{ url_for('conditions') }}">Conditions</a>
+            </div>
 
             <a href="{{ url_for('notifications') }}" class="nav-bell">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
@@ -38,6 +27,22 @@
                     </span>
                 {% endif %}
             </a>
+        </div>
+
+        <div class="nav-search-row">
+            <form method="GET" action="{{ url_for('home') }}" class="nav-search-form">
+                <input type="hidden" name="view" value="{{ view if view is defined else 'all' }}">
+                <input 
+                    type="text" 
+                    name="q" 
+                    placeholder="Search..." 
+                    class="nav-search-input"
+                    value="{{ keyword if keyword is defined else '' }}"
+                >
+            </form>
+        </div>
+
+        <div class="nav-bottom-row">
             <a href="{{ url_for('profile') }}" class="nav-user">
                 Logged in as {{ current_user.display_name if current_user is defined and current_user.display_name else session.get('username') }}
             </a>

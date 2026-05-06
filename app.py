@@ -1787,6 +1787,16 @@ def send_group_message(group_id):
     add_group_message_to_index(new_message)
 
     flash("Message sent!", "success")
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({
+            "success": True,
+            "message": {
+                "id": new_message.id,
+                "content": new_message.content,
+                "author": current_user.username,
+                "created_at": new_message.created_at.strftime("%Y-%m-%d %H:%M")
+            }
+        })
     return redirect(url_for("group_detail", group_id=group_id))
 
 @app.route("/ask_ai", methods=["POST"])

@@ -798,3 +798,62 @@ button:hover,
     background: #fee2e2;
     border-color: #ef4444;
 }
+
+.nav-top-row {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav-search-row {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.nav-bottom-row {
+    width: 100%;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.nav-search-form {
+    width: 100%;
+}
+
+.nav-search-input {
+    width: 100%;
+}
+
+.nav-bell {
+    margin-left: auto;
+}
+
+.group-action-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.enter-group-button {
+    width: auto !important;
+    flex: 1;
+}
+
+.notification-badge-inline {
+    white-space: nowrap;
+}
+
+.group-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0 18px;
+}
+
+.group-badge-row .member-badge {
+    margin-bottom: 0;
+}
