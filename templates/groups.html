@@ -40,10 +40,12 @@
 </div>
 
 <h1>Groups</h1>
-
+<!--
 <div class="section">
     <a href="{{ url_for('create_group') }}" class="button-link">Create a New Group</a>
 </div>
+-->
+
 
 <form method="GET" action="{{ url_for('group_list') }}" class="search-form">
     <input type="text" name="q" placeholder="Search groups..." value="{{ keyword }}">
@@ -98,4 +100,7 @@
     {% endif %}
 </div>
 
+<a href="{{ url_for('create_group') }}" class="floating-create-button">
+    +
+</a>
 {% endblock %}
