@@ -245,13 +245,19 @@ button:hover,
     display: block;
 }
 
+
 .post-actions,
 .comment-actions {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-top: 12px;
+}
+.post-actions-left {
+    display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 12px;
-    flex-wrap: wrap;
 }
 
 .like-button,
@@ -692,4 +698,103 @@ button:hover,
     .nav-left a {
         padding: 6px 0;
     }
+}
+
+.create-post-panel {
+    display: none;
+}
+
+.create-post-panel.open {
+    display: block;
+    animation: fadeInUp 0.25s ease;
+}
+
+.floating-create-button {
+    position: fixed;
+    bottom: 24px;
+    right: 20px;
+
+    width: 64px;
+    height: 64px;
+
+    border-radius: 50%;
+
+    background: linear-gradient(135deg, #1f6f8b, #2c8cab);
+    color: white;
+
+    border: none;
+
+    font-size: 36px;
+    font-weight: 300;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    box-shadow: 0 10px 24px rgba(31, 111, 139, 0.35);
+
+    cursor: pointer;
+
+    z-index: 9999;
+
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.floating-create-button:hover {
+    transform: scale(1.06);
+    box-shadow: 0 14px 30px rgba(31, 111, 139, 0.45);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 700px) {
+    .floating-create-button {
+        width: 60px;
+        height: 60px;
+        font-size: 34px;
+
+        bottom: 20px;
+        right: 18px;
+    }
+}
+
+.like-button,
+.delete-button {
+    width: auto !important;
+}
+
+.icon-button {
+    background: transparent;
+    border: 1px solid #d1d5db;
+    color: #64748b;
+
+    width: 40px !important;
+    height: 40px;
+
+    border-radius: 50%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+
+    font-size: 18px;
+
+    box-shadow: none;
+}
+
+.icon-button:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
 }

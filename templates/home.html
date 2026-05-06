@@ -12,7 +12,7 @@
     </form>
 </div>
 
-<div class="section">
+<div class="section create-post-panel" id="create-post-panel">
     <h2>Create a Post</h2>
     <form id="create-post-form" onsubmit="submitPost(event, this); return false;" class="form" enctype="multipart/form-data">
         <label>Title</label>
@@ -44,6 +44,7 @@
     </form>
 </div>
 
+<!--
 <div class="section">
     <h2>My Groups</h2>
     {% if my_groups %}
@@ -65,6 +66,8 @@
         <p>You haven't joined any groups yet.</p>
     {% endif %}
 </div>
+-->
+
 
 <div class="section">
     <h2>
@@ -139,32 +142,36 @@
                 {% set post_comment_count = comments | selectattr("post_id", "equalto", post.id) | list | length %}
 
                 <div class="post-actions">
-                    <button
-                        type="button"
-                        class="like-button {% if user_liked %}liked{% endif %}"
-                        data-post-id="{{ post.id }}"
-                        onclick="toggleLike(this)"
-                    >
-                        {% if user_liked %}♥{% else %}♡{% endif %}
-                    </button>
 
-                    <span class="like-count" id="like-count-{{ post.id }}">
-                        {{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}
-                        ·
-                        {{ post_comment_count }} comment{% if post_comment_count != 1 %}s{% endif %}
-                    </span>
+                    <div class="post-actions-left">
+                        <button
+                            type="button"
+                            class="like-button {% if user_liked %}liked{% endif %}"
+                            data-post-id="{{ post.id }}"
+                            onclick="toggleLike(this)"
+                        >
+                            {% if user_liked %}♥{% else %}♡{% endif %}
+                        </button>
+
+                        <span class="like-count" id="like-count-{{ post.id }}">
+                            {{ post_like_count }} like{% if post_like_count != 1 %}s{% endif %}
+                            ·
+                            {{ post_comment_count }} comment{% if post_comment_count != 1 %}s{% endif %}
+                        </span>
+                    </div>
+
+                    {% if post.author_id == current_user.id %}
+                        <button
+                            type="button"
+                            class="delete-button icon-button"
+                            data-post-id="{{ post.id }}"
+                            onclick="deletePost(this)"
+                        >
+                            🗑️
+                        </button>
+                    {% endif %}
+
                 </div>
-
-                {% if post.author_id == current_user.id %}
-                    <button
-                        type="button"
-                        class="delete-button"
-                        data-post-id="{{ post.id }}"
-                        onclick="deletePost(this)"
-                    >
-                        Delete
-                    </button>
-                {% endif %}
 
                 <div class="comment-section">
                     <h4 id="comment-title-{{ post.id }}">Comments ({{ post_comment_count }})</h4>
@@ -187,31 +194,35 @@
                                     </small>
 
                                     <div class="comment-actions">
-                                        <button
-                                            type="button"
-                                            class="comment-like-button {% if user_liked_comment %}liked{% endif %}"
-                                            data-comment-id="{{ comment.id }}"
-                                            onclick="toggleCommentLike(this)"
-                                        >
-                                            {% if user_liked_comment %}♥{% else %}♡{% endif %}
-                                        </button>
 
-                                        <span class="comment-like-count" id="comment-like-count-{{ comment.id }}">
-                                            {{ comment_like_count }} like{% if comment_like_count != 1 %}s{% endif %}
-                                        </span>
+                                        <div class="comment-actions-left">
+                                            <button
+                                                type="button"
+                                                class="comment-like-button {% if user_liked_comment %}liked{% endif %}"
+                                                data-comment-id="{{ comment.id }}"
+                                                onclick="toggleCommentLike(this)"
+                                            >
+                                                {% if user_liked_comment %}♥{% else %}♡{% endif %}
+                                            </button>
+
+                                            <span class="comment-like-count" id="comment-like-count-{{ comment.id }}">
+                                                {{ comment_like_count }} like{% if comment_like_count != 1 %}s{% endif %}
+                                            </span>
+                                        </div>
+
+                                        {% if comment.author_id == current_user.id %}
+                                            <button
+                                                type="button"
+                                                class="delete-comment-button icon-button"
+                                                data-comment-id="{{ comment.id }}"
+                                                data-post-id="{{ post.id }}"
+                                                onclick="deleteComment(this)"
+                                            >
+                                                🗑️
+                                            </button>
+                                        {% endif %}
+
                                     </div>
-
-                                    {% if comment.author_id == current_user.id %}
-                                        <button
-                                            type="button"
-                                            class="delete-comment-button"
-                                            data-comment-id="{{ comment.id }}"
-                                            data-post-id="{{ post.id }}"
-                                            onclick="deleteComment(this)"
-                                        >
-                                            Delete Comment
-                                        </button>
-                                    {% endif %}
                                 </div>
                             {% endfor %}
                         {% else %}
@@ -652,5 +663,28 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 {% endif %}
 
+<script>
+function toggleCreatePost() {
+    const panel = document.getElementById("create-post-panel");
+    const button = document.querySelector(".floating-create-button");
+
+    if (panel.classList.contains("open")) {
+        panel.classList.remove("open");
+        button.textContent = "+";
+    } else {
+        panel.classList.add("open");
+        button.textContent = "−";
+
+        panel.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+    }
+}
+</script>
+
+<button class="floating-create-button" onclick="toggleCreatePost()">
+    +
+</button>
 {% endblock %}
 
