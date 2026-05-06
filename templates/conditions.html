@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <div class="section">
     <h1>Fishing Conditions</h1>
     <p>Check weather, wind, and wave conditions before planning a fishing trip.</p>
+    <div id="conditions-map"></div>
 
     <form method="POST" action="{{ url_for('conditions') }}" class="form">
         <label>Select Location</label>
@@ -91,4 +96,31 @@
 {% endif %}
 {% endif %}
 
+<script id="map-spots-data" type="application/json">
+    {{ map_spots | tojson }}
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const mapSpots = JSON.parse(
+        document.getElementById("map-spots-data").textContent
+    );
+
+    const map = L.map("conditions-map").setView([33.8, -118.2], 8);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18
+    }).addTo(map);
+
+    mapSpots.forEach(spot => {
+        L.marker([spot.lat, spot.lon])
+            .addTo(map)
+            .bindPopup(`<strong>${spot.name}</strong><br>Fishing condition location`);
+    });
+
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 300);
+});
+</script>
 {% endblock %}

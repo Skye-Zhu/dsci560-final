@@ -2009,7 +2009,6 @@ def rebuild_all_indexes():
 
 
 #weather & tide & wind
-
 @app.route("/conditions", methods=["GET", "POST"])
 def conditions():
     current_user = get_current_user()
@@ -2108,6 +2107,15 @@ Your task:
 
         ai_summary = call_llm(prompt)
 
+    map_spots = [
+        {
+            "name": name,
+            "lat": coords[0],
+            "lon": coords[1]
+        }
+        for name, coords in FISHING_SPOTS.items()
+    ]
+
     return render_template(
         "conditions.html",
         current_user=current_user,
@@ -2116,6 +2124,7 @@ Your task:
         ai_summary=ai_summary,
         selected_spot=selected_spot,
         selected_date=selected_date,
+        map_spots=map_spots,
         selected_time=selected_time
     )
 
