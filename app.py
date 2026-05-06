@@ -23,6 +23,8 @@ import json
 import faiss
 from pathlib import Path
 from datetime import datetime
+from openai import OpenAI
+from flask import send_from_directory
 
 
 
@@ -491,6 +493,8 @@ Content: {post.content or ''}
 Location: {post.location or ''}
 """.strip()
 
+
+
 def get_current_user():
     user_id = session.get("user_id")
     if not user_id:
@@ -590,6 +594,78 @@ def score_post(post, terms):
             score += 2
 
     return score
+
+
+#ai
+client = OpenAI()
+
+def call_llm(prompt):
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt,
+    )
+    return response.output_text
+
+def calculate_fishing_stats(posts, comments):
+    total_posts = len(posts)
+
+    bait_keywords = [
+        "live bait", "sardine", "anchovy", "squid", "jig",
+        "iron", "surface iron", "soft plastic", "worms",
+        "spinnerbait", "crankbait", "lure"
+    ]
+
+    method_keywords = [
+        "trolling", "jigging", "casting", "bottom fishing",
+        "drifting", "flylining"
+    ]
+
+    location_counts = {}
+    bait_counts = {}
+    method_counts = {}
+
+    for post in posts:
+        text = f"{post.title or ''} {post.content or ''}".lower()
+
+        if post.location:
+            loc = post.location.strip()
+            location_counts[loc] = location_counts.get(loc, 0) + 1
+
+        for bait in bait_keywords:
+            if bait in text:
+                bait_counts[bait] = bait_counts.get(bait, 0) + 1
+
+        for method in method_keywords:
+            if method in text:
+                method_counts[method] = method_counts.get(method, 0) + 1
+
+    def format_counts(counts):
+        if total_posts == 0 or not counts:
+            return "No clear pattern found."
+
+        sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+
+        lines = []
+        for name, count in sorted_items:
+            percentage = round((count / total_posts) * 100, 1)
+            lines.append(f"{name}: {count}/{total_posts} posts ({percentage}%)")
+
+        return "\n".join(lines)
+
+    stats = f"""
+Number of relevant posts: {total_posts}
+
+Bait patterns:
+{format_counts(bait_counts)}
+
+Method patterns:
+{format_counts(method_counts)}
+
+Location patterns:
+{format_counts(location_counts)}
+""".strip()
+
+    return stats
 
 #public ai
 def retrieve_relevant_public_posts_keyword(query, top_k=10):
@@ -740,19 +816,7 @@ def retrieve_relevant_group_messages_keyword(group_id, query, top_k=10):
     scored.sort(key=lambda x: x[0], reverse=True)
     return [m for score, m in scored[:top_k]]
 
-def call_llm(prompt):
-    url = "http://localhost:11434/api/generate"
 
-    payload = {
-        "model": "llama3",
-        "prompt": prompt,
-        "stream": False
-    }
-
-    response = requests.post(url, json=payload)
-    data = response.json()
-
-    return data["response"]
 
 def redirect_back_to_home():
     view = request.form.get("view", "all")
@@ -1140,6 +1204,10 @@ def create_public_post():
             "group_name": selected_group_name
         }
     })
+
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 @app.route("/delete_public_post/<int:post_id>", methods=["POST"])
 def delete_public_post(post_id):
@@ -1757,6 +1825,7 @@ def ask_ai():
     ])
 
     combined_text = "\n\n".join([post_text, comment_text]).strip()
+    stats_text = calculate_fishing_stats(matched_posts, matched_comments)
 
     prompt = f"""
 You are an AI assistant for a fishing knowledge platform.
@@ -1767,6 +1836,10 @@ If the information is insufficient, clearly say so.
 
 User question:
 {query}
+
+Computed data patterns:
+
+{stats_text}
 
 Relevant public fishing content:
 {combined_text}
@@ -1779,6 +1852,8 @@ Provide a structured answer with:
 - Limitations of the available data
 
 Keep the answer clear, concise, and useful for beginners.
+Provide a structured answer in plain text only.
+Do NOT use Markdown. Do NOT use #, ##, ###, bullet markdown, or bold formatting.
 """
 
     response = call_llm(prompt)
@@ -1844,6 +1919,7 @@ def ask_group_ai(group_id):
     ])
 
     combined_text = "\n\n".join([post_text, message_text]).strip()
+    stats_text = calculate_fishing_stats(matched_posts, [])
 
     prompt = f"""
 You are a fishing assistant for a specific fishing group.
@@ -1857,6 +1933,9 @@ Group name: {group.name}
 User question:
 {query}
 
+Computed data patterns:
+{stats_text}
+
 Relevant group content:
 {combined_text}
 
@@ -1868,6 +1947,8 @@ Provide a structured answer with:
 - Limitations of available data
 
 If the question asks for recent activity, focus more on recent content.
+Provide a structured answer in plain text only.
+Do NOT use Markdown. Do NOT use #, ##, ###, bullet markdown, or bold formatting.
 """
 
     response = call_llm(prompt)
@@ -2013,4 +2094,5 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         seed_groups()
-    app.run(debug=False)
+
+    app.run(host="0.0.0.0", port=8000, debug=False)

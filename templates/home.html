@@ -125,7 +125,7 @@
                 {% endif %}
 
                 {% if post.image %}
-                    <img src="{{ url_for('static', filename='uploads/' + post.image) }}" class="post-image">
+                    <img src="{{ url_for('uploaded_file', filename=post.image) }}" class="post-image">
                 {% endif %}
 
                 <small>
@@ -543,7 +543,7 @@ async function submitPost(event, form) {
 
         if (shouldInsert && feedPosts) {
             const imageHtml = post.image
-                ? `<img src="/static/uploads/${post.image}" class="post-image">`
+                ? `<img src="/uploads/${post.image}" class="post-image">`
                 : "";
 
             const locationHtml = post.location
