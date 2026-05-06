@@ -1903,9 +1903,29 @@ def ask_group_ai(group_id):
     if not query:
         flash("Please enter a question.", "error")
         return redirect(url_for("group_detail", group_id=group_id))
+    
+    shortcut_queries = [
+        "summarize this group this week",
+        "What recent fishing reports are in this group?",
+        "What fishing methods are commonly mentioned in this group?"
+    ]
 
-    matched_posts = retrieve_relevant_group_posts(group_id, query, top_k=10)
-    matched_messages = retrieve_relevant_group_messages(group_id, query, top_k=15)
+    is_shortcut = query.lower() in shortcut_queries
+
+    #matched_posts = retrieve_relevant_group_posts(group_id, query, top_k=10)
+    #matched_messages = retrieve_relevant_group_messages(group_id, query, top_k=15)
+    if is_shortcut:
+        matched_posts = Post.query.filter_by(
+            group_id=group_id,
+            visibility="group"
+        ).order_by(Post.created_at.desc()).limit(10).all()
+
+        matched_messages = GroupMessage.query.filter_by(
+            group_id=group_id
+        ).order_by(GroupMessage.created_at.desc()).limit(15).all()
+    else:
+        matched_posts = retrieve_relevant_group_posts(group_id, query, top_k=10)
+        matched_messages = retrieve_relevant_group_messages(group_id, query, top_k=15)
 
     if not matched_posts and not matched_messages:
         return render_template(
